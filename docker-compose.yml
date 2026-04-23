@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: ankane/pgvector
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: appdb
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  ai-service:
+    build: ./services/ai-service
+    ports:
+      - "8000:8000"
