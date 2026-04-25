@@ -1,6 +1,7 @@
 'use client'
 
 import Link from "next/link";
+import SystemStatus from "./components/SystemStatus";
 
 export default function Home() {
   return (
@@ -11,18 +12,21 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <div><h1 style={{ fontFamily: 'var(--font-orbitron)', fontSize:30 }}>SkillFuze</h1></div>
           </div>
-          <Link
-            href="/login"
-            className="px-6 py-2 rounded font-semibold transition-all"
-            style={{ 
-              backgroundColor: '#3c97fa', 
-              color: '#FFFFFF'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#117ff7'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3c97fa'}
-          >
-            Login
-          </Link>
+          <div className="flex items-center gap-6">
+            <SystemStatus />
+            <Link
+              href="/login"
+              className="px-6 py-2 rounded font-semibold transition-all"
+              style={{ 
+                backgroundColor: '#3c97fa', 
+                color: '#FFFFFF'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#117ff7'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3c97fa'}
+            >
+              Login
+            </Link>
+          </div>
         </div>
       </header>
 
