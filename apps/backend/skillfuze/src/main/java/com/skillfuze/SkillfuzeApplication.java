@@ -1,4 +1,4 @@
-package com.skillfuze.skillfuze;
+package com.skillfuze;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

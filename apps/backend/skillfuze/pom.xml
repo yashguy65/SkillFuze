@@ -68,6 +68,10 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+    		<groupId>org.springframework.boot</groupId>
+    		<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -87,6 +91,9 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<fork>true</fork>
+				</configuration>
 				<executions>
 					<execution>
 						<id>default-compile</id>
@@ -95,6 +102,7 @@
 							<goal>compile</goal>
 						</goals>
 						<configuration>
+							<fork>true</fork>
 							<annotationProcessorPaths>
 								<path>
 									<groupId>org.projectlombok</groupId>
@@ -110,6 +118,7 @@
 							<goal>testCompile</goal>
 						</goals>
 						<configuration>
+							<fork>true</fork>
 							<annotationProcessorPaths>
 								<path>
 									<groupId>org.projectlombok</groupId>
