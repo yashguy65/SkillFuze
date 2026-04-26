@@ -4,8 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
 
-export default function UserDropdown({ user }: { user: any }) {
+export default function UserDropdown({ user }: { user: User }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const router = useRouter()
 
