@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
+export const metadata = {
+  title: 'My Profile | SkillFuze',
+}
+
 export default async function ProfilePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -13,7 +17,7 @@ export default async function ProfilePage() {
   const avatar = user.user_metadata.avatar_url
 
   return (
-    <div className="p-6">
+    <main className="max-w-7xl mx-auto px-6 py-10">
       <h1 className="text-3xl font-bold mb-4">Profile</h1>
       <div className="bg-gray-800 rounded-lg p-6 max-w-2xl">
         <div className="flex items-center gap-4 mb-6">
@@ -48,6 +52,6 @@ export default async function ProfilePage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   )
 }
