@@ -11,6 +11,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [username, setUsername] = useState('@user');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -20,6 +21,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         setUsername(`@${user.user_metadata.user_name}`);
       } else if (user?.email) {
         setUsername(user.email.split('@')[0]);
+      }
+      if (user?.user_metadata?.avatar_url) {
+        setAvatarUrl(user.user_metadata.avatar_url);
       }
     };
     fetchUser();
@@ -83,9 +87,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           )}
           <button 
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-slate-950 hover:ring-teal-500/50 transition-all uppercase"
+            className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-slate-950 hover:ring-teal-500/50 transition-all uppercase overflow-hidden"
           >
-            {username.charAt(username.startsWith('@') ? 1 : 0)}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={username} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              username.charAt(username.startsWith('@') ? 1 : 0)
+            )}
           </button>
         </div>
       </aside>
