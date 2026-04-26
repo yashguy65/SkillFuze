@@ -34,15 +34,13 @@ export default async function Dashboard() {
         {/* Top Bar */}
         <header className="flex justify-between items-center px-8 py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10">
           <div className="w-10"></div> {/* Spacer for centering */}
-          <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-5xl tracking-tighter text-white">Dashboard</h1>
           <div className="flex items-center gap-4">
             <button className="p-2 text-slate-400 hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-teal-500 rounded-full shadow-[0_0_8px_rgba(20,184,166,0.8)]"></span>
             </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold shadow-md">
-              {userInitial}
-            </div>
+
           </div>
         </header>
 
@@ -52,9 +50,9 @@ export default async function Dashboard() {
             <div className="relative mb-12 max-w-2xl mx-auto group mt-4">
               <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
               <div className="relative flex items-center bg-slate-900 border border-slate-700 hover:border-teal-500/50 rounded-full p-2 pl-6 shadow-lg transition-all">
-                <input 
-                  type="text" 
-                  placeholder="I'm building..." 
+                <input
+                  type="text"
+                  placeholder="I'm building..."
                   className="flex-1 bg-transparent border-none outline-none text-slate-200 placeholder:text-slate-500 text-lg"
                 />
                 <button className="bg-teal-500 hover:bg-teal-400 text-slate-950 p-3 rounded-full transition-colors ml-2 shadow-[0_0_15px_rgba(20,184,166,0.3)]">
@@ -98,7 +96,7 @@ export default async function Dashboard() {
                     <Filter className="w-4 h-4 text-teal-400" />
                     <h3 className="font-semibold text-slate-200">Quick Filters</h3>
                   </div>
-                  
+
                   <div className="space-y-6">
                     <div>
                       <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Roles</h4>
@@ -113,7 +111,7 @@ export default async function Dashboard() {
                         ))}
                       </div>
                     </div>
-                    
+
                     <div>
                       <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Commitment</h4>
                       <div className="space-y-3">

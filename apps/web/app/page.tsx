@@ -33,12 +33,12 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50 selection:bg-teal-500/30" style={{ fontFamily: 'var(--font-fira-code), monospace' }}>
       {/* Navbar */}
       <header className="border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-black tracking-tighter text-white">SkillFuze</h1>
+            <h1 className="text-4xl tracking-tighter text-white">SkillFuze</h1>
           </div>
           <div className="flex items-center gap-6">
             <SystemStatus />
@@ -60,7 +60,7 @@ export default function Home() {
 
         <div className="max-w-4xl w-full text-center relative z-10 flex flex-col items-center">
 
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8 leading-[1.1]">
+          <h1 className="text-4xl md:text-7xl lg:text-8xl tracking-tight mb-8 leading-[1.1]">
             Find your next <br />
             <span
               className={`text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 inline-block min-w-[300px] md:min-w-[400px] transition-all duration-300 ease-in-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
