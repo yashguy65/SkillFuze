@@ -1,6 +1,7 @@
 export async function checkBackendHealth() {
     try {
-        const response = await fetch('http://localhost:8080/health', {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        const response = await fetch(`${baseUrl}/health`, {
             // next.js specific revalidation rules if needed
             next: { revalidate: 60 }
         });
