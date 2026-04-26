@@ -15,7 +15,7 @@ services:
     ports:
       - "6379:6379"
 
-  #ai-service:
-    #build: ./services/ai-service
-    #ports:
-    #  - "8000:8000"
+  ai-service:
+    build: ./services/ai-service
+    ports:
+      - "8000:8000"
