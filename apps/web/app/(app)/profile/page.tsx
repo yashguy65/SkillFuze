@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Image from 'next/image'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -19,6 +18,7 @@ export default async function ProfilePage() {
       <div className="bg-gray-800 rounded-lg p-6 max-w-2xl">
         <div className="flex items-center gap-4 mb-6">
           {/* Display the GitHub Photo */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={avatar}
             alt="Profile Photo"
@@ -43,7 +43,7 @@ export default async function ProfilePage() {
           <div>
             <h3 className="text-lg font-medium mb-2 border-b border-gray-700 pb-2">AI Persona</h3>
             <p className="text-gray-300">
-              A placeholder for the AI generated summary of this user's professional persona, based on their activity and questionnaire answers.
+              A placeholder for the AI generated summary of this user&apos;s professional persona, based on their activity and questionnaire answers.
             </p>
           </div>
         </div>

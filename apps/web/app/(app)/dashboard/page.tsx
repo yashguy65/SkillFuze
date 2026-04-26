@@ -2,11 +2,12 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState, useRef } from 'react'
+import { User } from '@supabase/supabase-js'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
@@ -49,6 +50,7 @@ export default function Dashboard() {
               className="flex items-center gap-2 px-4 py-2 rounded-md hover:bg-gray-800 transition-colors"
               style={{ color: '#E5E7EB' }}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src={user?.user_metadata?.avatar_url || 'https://github.com/identicons/default.png'} 
                 alt="Avatar" 
