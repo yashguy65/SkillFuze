@@ -1,0 +1,13 @@
+@echo off
+echo Starting SkillSync Development Environment...
+
+echo Starting Docker Containers...
+start cmd /k "docker compose up --build"
+
+echo Starting Spring Boot Backend...
+start cmd /k "cd apps\backend\skillfuze && .\mvnw.cmd spring-boot:run"
+
+echo Starting Next.js Frontend...
+start cmd /k "cd apps\web && pnpm dev"
+
+echo All services are booting up!
