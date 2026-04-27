@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from schemas.ingest import GitHubIngestRequest, IngestResponse
 from parsers.github_parser import GitHubParser
 from pipelines.embedder import get_embedder
+from pipelines.supabase_client import get_supabase
 
 router = APIRouter()
 
@@ -26,8 +27,28 @@ async def ingest_github_data(request: GitHubIngestRequest):
     texts = [doc.page_content for doc in documents]
     embeddings = embedder.embed_documents(texts)
     
-    # TODO: Upsert to Supabase pgvector
-    # For now, we stub this out
-    chunks_stored = len(documents)
+    # Upsert to Supabase
+    supabase = get_supabase()
+    
+    rows = []
+    for doc, emb in zip(documents, embeddings):
+        rows.append({
+            "user_id": request.user_id,
+            "repo_name": doc.metadata.get("repo", ""),
+            "content": doc.page_content,
+            "metadata": doc.metadata,
+            "embedding": emb
+        })
+        
+    try:
+        # Delete old chunks for this user to avoid duplicates on re-ingest
+        supabase.table("github_chunks").delete().eq("user_id", request.user_id).execute()
+        # Insert new chunks
+        res = supabase.table("github_chunks").insert(rows).execute()
+        chunks_stored = len(rows)  # res.data might be empty depending on Supabase version
+        print(f"Successfully inserted {chunks_stored} chunks into Supabase")
+    except Exception as e:
+        print("Supabase Error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
     return IngestResponse(chunks_stored=chunks_stored)
