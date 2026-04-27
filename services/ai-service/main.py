@@ -1,9 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pipelines.embedder import get_embedder
 from routers import ingest, persona, match
-import os
 from dotenv import load_dotenv
 
 # Load root .env file
@@ -18,7 +18,6 @@ async def lifespan(app: FastAPI):
     yield
     print("Shutting down...")
 
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="SkillFuze AI Service", lifespan=lifespan)
 

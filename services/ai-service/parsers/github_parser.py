@@ -76,9 +76,16 @@ class GitHubParser:
 
             documents = []
             
+            # Common metadata fields for every document from this user
+            base_meta = {
+                "user_id": user_id,
+                "source": "github",
+                "github_username": username,
+            }
+
             # User profile doc
             profile_content = f"User: {user_data.get('login')}\nBio: {user_data.get('bio')}\nLocation: {user_data.get('location')}\nTotal Commits: {user_data.get('contributionsCollection', {}).get('totalCommitContributions')}"
-            documents.append(Document(page_content=profile_content, metadata={"user_id": user_id, "source": "github", "repo": "profile"}))
+            documents.append(Document(page_content=profile_content, metadata={**base_meta, "repo": "profile"}))
 
             # Repositories docs
             for repo in user_data.get("repositories", {}).get("nodes", []):
@@ -100,6 +107,6 @@ class GitHubParser:
                     pass
 
                 repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguages: {lang_names}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
-                documents.append(Document(page_content=repo_content, metadata={"user_id": user_id, "source": "github", "repo": repo_name, "languages": languages}))
+                documents.append(Document(page_content=repo_content, metadata={**base_meta, "repo": repo_name, "languages": languages}))
 
             return documents
