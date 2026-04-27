@@ -21,8 +21,10 @@ class GitHubParser:
               nodes {
                 name
                 description
-                primaryLanguage {
-                  name
+                languages(first: 5, orderBy: {field: SIZE, direction: DESC}) {
+                  nodes {
+                    name
+                  }
                 }
                 repositoryTopics(first: 5) {
                   nodes {
@@ -63,7 +65,9 @@ class GitHubParser:
             response.raise_for_status()
             data = response.json()
             
-            if "errors" in data:
+            # GraphQL returns errors for missing READMEs, but also returns partial data.
+            # Only fail if there is no data at all.
+            if "errors" in data and not data.get("data"):
                 raise ValueError(f"GraphQL Error: {data['errors']}")
 
             user_data = data.get("data", {}).get("user")
@@ -81,8 +85,9 @@ class GitHubParser:
                 if not repo: continue
                 repo_name = repo.get("name")
                 desc = repo.get("description")
-                lang = repo.get("primaryLanguage")
-                lang_name = lang.get("name") if lang else "None"
+                
+                languages = [l.get("name") for l in repo.get("languages", {}).get("nodes", []) if l.get("name")]
+                lang_names = ", ".join(languages) if languages else "None"
                 
                 topics = [t.get("topic", {}).get("name") for t in repo.get("repositoryTopics", {}).get("nodes", []) if t.get("topic")]
                 
@@ -94,7 +99,7 @@ class GitHubParser:
                 except (KeyError, TypeError):
                     pass
 
-                repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguage: {lang_name}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
+                repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguages: {lang_names}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
                 documents.append(Document(page_content=repo_content, metadata={"user_id": user_id, "source": "github", "repo": repo_name}))
 
             return documents
