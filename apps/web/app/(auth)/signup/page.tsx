@@ -1,19 +1,20 @@
 'use client'
 
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
-export default function LoginPage() {
-  const signInWithGithub = async () => {
+export default function SignupPage() {
+  const signUpWithGithub = async () => {
     const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
   }
 
-  const signInWithGoogle = async () => {
+  const signUpWithGoogle = async () => {
     const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -23,36 +24,34 @@ export default function LoginPage() {
           access_type: 'offline',
           prompt: 'select_account',
         },
-      }
+      },
     })
   }
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{ backgroundColor: '#020617', fontFamily: 'var(--font-open-sans, Open Sans), sans-serif' }}
+      className="min-h-screen flex items-center justify-center"
+      style={{ backgroundColor: '#0F1419', fontFamily: 'var(--font-open-sans, Open Sans), sans-serif' }}
     >
-      {/* Abstract background blobs for startup aesthetic */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-teal-500/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
-
-      <div className="w-full max-w-md px-4 relative z-10">
-        {/* Logo / Brand */}
+      <div className="w-full max-w-md px-4">
+        {/* Brand */}
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-semibold mt-3 mb-1" style={{ color: '#ffffffff' }}>
-            Welcome to SkillFuze!
+          <Link href="/" className="text-3xl font-bold" style={{ color: '#3c97fa', textDecoration: 'none' }}>
+            SkillFuze
+          </Link>
+          <h1 className="text-2xl font-semibold mt-3 mb-1" style={{ color: '#E5E7EB' }}>
+            Create your account
           </h1>
-
+          <p className="text-sm" style={{ color: '#9CA3AF' }}>
+            Join thousands of builders finding their next collaboration
+          </p>
         </div>
 
         <div className="rounded-xl p-8" style={{ backgroundColor: '#1A1F2E', border: '1px solid #2D3748' }}>
-          <p className="text-s text-center " style={{ color: '#9CA3AF' }}>
-            Sign in to continue to your dashboard
-          </p><br />
-          {/* GitHub Button */}
+          {/* GitHub */}
           <button
-            id="login-github-btn"
-            onClick={signInWithGithub}
+            id="signup-github-btn"
+            onClick={signUpWithGithub}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all mb-4"
             style={{ backgroundColor: '#24292F', color: '#FFFFFF', border: '1px solid #444C56', cursor: 'pointer' }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#333B44')}
@@ -62,14 +61,14 @@ export default function LoginPage() {
             Continue with GitHub
           </button>
 
-          {/* Google Button */}
+          {/* Google */}
           <button
-            id="login-google-btn"
-            onClick={signInWithGoogle}
+            id="signup-google-btn"
+            onClick={signUpWithGoogle}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all"
             style={{ backgroundColor: '#24292F', color: '#FFFFFF', border: '1px solid #444C56', cursor: 'pointer' }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#333B44')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#24292F')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F9FAFB')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
           >
             <GoogleIcon className="w-5 h-5" />
             Continue with Google
@@ -78,7 +77,10 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-xs text-center mt-6" style={{ color: '#6B7280' }}>
-          By continuing, you agree to our Terms of Service
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: '#3c97fa', textDecoration: 'none' }}>
+            Sign in
+          </Link>
         </p>
       </div>
     </div>
@@ -87,7 +89,7 @@ export default function LoginPage() {
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12" />
     </svg>
   )

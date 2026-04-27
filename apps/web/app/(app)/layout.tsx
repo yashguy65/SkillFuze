@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode, useState, useEffect } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Menu, Home, User, Settings, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -38,7 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { icon: Home, label: 'Home', href: '/dashboard' },
     { icon: User, label: 'Profile', href: '/profile' },
-    { icon: Settings, label: 'Your Teams', href: '#' },
+    { icon: Settings, label: 'Settings', href: '#' },
   ];
 
   return (
@@ -76,7 +77,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <p className="text-xs font-semibold text-slate-400">Signed in as</p>
                 <p className="text-sm font-bold truncate">{username}</p>
               </div>
-              <button 
+              <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
               >
@@ -85,12 +86,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
           )}
-          <button 
+          <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-slate-950 hover:ring-teal-500/50 transition-all uppercase overflow-hidden"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt={username} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <Image src={avatarUrl} alt={username} width={40} height={40} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               username.charAt(username.startsWith('@') ? 1 : 0)
             )}
