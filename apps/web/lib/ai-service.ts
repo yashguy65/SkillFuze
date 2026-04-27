@@ -58,3 +58,30 @@ export async function findMatches(payload: MatchRequest): Promise<MatchResponse>
 
   return res.json() as Promise<MatchResponse>
 }
+
+// ── Persona ───────────────────────────────────────────────────────────────────
+
+export interface PersonaRequest {
+  user_id: string
+}
+
+export interface PersonaResponse {
+  summary: string
+  skills: string[]
+  embedding: number[]
+}
+
+export async function getPersona(payload: PersonaRequest): Promise<PersonaResponse> {
+  const res = await fetch(`${AI_SERVICE_URL}/api/v1/persona`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? 'Failed to fetch persona')
+  }
+
+  return res.json() as Promise<PersonaResponse>
+}

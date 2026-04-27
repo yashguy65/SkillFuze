@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pipelines.embedder import get_embedder
 from routers import ingest, persona, match
+import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load root .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,8 +18,18 @@ async def lifespan(app: FastAPI):
     yield
     print("Shutting down...")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="SkillFuze AI Service", lifespan=lifespan)
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(persona.router, prefix="/api/v1", tags=["Persona"])
 app.include_router(match.router, prefix="/api/v1", tags=["Match"])

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { syncGitHub } from '@/lib/ai-service'
-import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react'
+import { syncGitHub, getPersona } from '@/lib/ai-service'
+import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink, Plus, X } from 'lucide-react'
 
 type SyncStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -15,6 +15,12 @@ export default function ProfilePage() {
   } | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [syncMessage, setSyncMessage] = useState('')
+  const [skills, setSkills] = useState<string[]>([])
+  
+  // Custom Tags State
+  const [customTags, setCustomTags] = useState<string[]>([])
+  const [isAddingTag, setIsAddingTag] = useState(false)
+  const [newTagVal, setNewTagVal] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -22,6 +28,17 @@ export default function ProfilePage() {
       if (!user) window.location.href = '/login'
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setUser(user as any)
+
+      if (user) {
+        // Load custom tags from metadata
+        if (user.user_metadata?.custom_tags) {
+          setCustomTags(user.user_metadata.custom_tags)
+        }
+        
+        getPersona({ user_id: user.id })
+          .then(data => setSkills(data.skills))
+          .catch(() => setSkills([]))
+      }
     })
   }, [])
 
@@ -52,6 +69,11 @@ export default function ProfilePage() {
         user_id: user.id,
         github_username: githubUsername,
       })
+
+      // Refresh persona to get updated languages
+      const persona = await getPersona({ user_id: user.id }).catch(() => null)
+      if (persona) setSkills(persona.skills)
+
       setSyncStatus('success')
       setSyncMessage(
         result.chunks_stored === 0
@@ -64,6 +86,29 @@ export default function ProfilePage() {
     } finally {
       // Reset after 6 s so the button is usable again
       setTimeout(() => setSyncStatus('idle'), 6000)
+    }
+  }
+
+  const handleAddTag = async () => {
+    if (!newTagVal.trim() || !user) return
+    
+    const tag = newTagVal.trim()
+    if (customTags.includes(tag)) {
+      setNewTagVal('')
+      setIsAddingTag(false)
+      return
+    }
+
+    const updatedTags = [...customTags, tag]
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: { custom_tags: updatedTags }
+    })
+    
+    if (!error) {
+      setCustomTags(updatedTags)
+      setNewTagVal('')
+      setIsAddingTag(false)
     }
   }
 
@@ -101,10 +146,10 @@ export default function ProfilePage() {
   }
 
   const syncButtonClass = {
-    idle:    'bg-slate-800 hover:bg-teal-500/10 text-slate-200 hover:text-teal-300 border border-slate-700 hover:border-teal-500/40',
+    idle: 'bg-slate-800 hover:bg-teal-500/10 text-slate-200 hover:text-teal-300 border border-slate-700 hover:border-teal-500/40',
     loading: 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed',
     success: 'bg-teal-500/10 text-teal-300 border border-teal-500/40',
-    error:   'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20',
+    error: 'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20',
   }[syncStatus]
 
   return (
@@ -168,11 +213,10 @@ export default function ProfilePage() {
           {/* Status message */}
           {syncMessage && (
             <p
-              className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${
-                syncStatus === 'success'
-                  ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
-                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
-              }`}
+              className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${syncMessage.includes('complete') || syncStatus === 'success'
+                ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                }`}
             >
               {syncMessage}
             </p>
@@ -183,39 +227,77 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {/* Skills */}
-        <div className="w-full mb-8">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 ml-1">
-            Skills
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {['React', 'TypeScript', 'Next.js', 'UI/UX'].map(skill => (
-              <span
-                key={skill}
-                className="px-4 py-1.5 bg-teal-500/10 text-teal-400 rounded-full text-sm font-medium border border-teal-500/20"
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        </div>
-
         {/* Tags */}
-        <div className="w-full mb-10">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 ml-1">
-            Tags
-          </h2>
+        <div className="w-full mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider ml-1">
+              Tags
+            </h2>
+            {!isAddingTag && (
+              <button 
+                onClick={() => setIsAddingTag(true)}
+                className="text-slate-400 hover:text-teal-400 transition-colors bg-slate-800 rounded-full p-1 border border-slate-700 hover:border-teal-500/40"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          {isAddingTag && (
+            <div className="flex items-center gap-2 mb-4">
+              <input 
+                type="text" 
+                value={newTagVal}
+                onChange={e => setNewTagVal(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                autoFocus
+                placeholder="New custom tag..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-teal-500/50 text-slate-200"
+              />
+              <button 
+                onClick={handleAddTag}
+                className="bg-teal-500/20 text-teal-400 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-teal-500/30 transition-colors"
+              >
+                Add
+              </button>
+              <button 
+                onClick={() => setIsAddingTag(false)}
+                className="text-slate-500 hover:text-slate-300 px-2"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            {['Looking for Co-founder', 'Night Owl'].map(tag => (
+            {customTags.map(tag => (
               <span
-                key={tag}
-                className="px-4 py-1.5 bg-transparent text-slate-300 rounded-full text-sm font-medium border border-slate-700"
+                key={`custom-${tag}`}
+                className="px-4 py-1.5 bg-slate-800 text-slate-300 rounded-full text-sm font-medium border border-slate-700"
               >
                 {tag}
               </span>
             ))}
+            {skills.length > 0 ? (
+              [...skills].reverse().map(skill => (
+                <span
+                  key={skill}
+                  className="px-4 py-1.5 bg-teal-500/10 text-teal-400 rounded-full text-sm font-medium border border-teal-500/20"
+                >
+                  {skill}
+                </span>
+              ))
+            ) : (
+              customTags.length === 0 && (
+                <span className="text-sm text-slate-500 italic ml-1">
+                  Sync GitHub to view languages
+                </span>
+              )
+            )}
           </div>
         </div>
+
+
 
         {/* Quick Actions */}
         <div className="w-full space-y-3 pt-6 border-t border-slate-800">
