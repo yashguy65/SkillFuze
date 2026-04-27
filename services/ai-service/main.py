@@ -1,17 +1,27 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pipelines.embedder import get_embedder
+from routers import ingest, persona, match
+from dotenv import load_dotenv
 
-app = FastAPI(title="SkillFuze AI Service Stub")
+load_dotenv()
 
-class ProfileChunk(BaseModel):
-    text: str
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm up the embedder on startup
+    print("Warming up HuggingFace Embeddings model...")
+    get_embedder()
+    print("Model loaded.")
+    yield
+    print("Shutting down...")
+
+app = FastAPI(title="SkillFuze AI Service", lifespan=lifespan)
+
+app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
+app.include_router(persona.router, prefix="/api/v1", tags=["Persona"])
+app.include_router(match.router, prefix="/api/v1", tags=["Match"])
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "ai-service"}
-
-@app.post("/api/v1/embeddings")
-def generate_embeddings(chunk: ProfileChunk):
-    # Stub for generating embeddings
-    # In phase 2, this will use an actual LLM/embedding model
-    return {"embedding": [0.1] * 1536} # Mock 1536-dimensional vector
