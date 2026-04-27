@@ -1,5 +1,5 @@
-const AI_SERVICE_URL =
-  process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000'
+// All AI service calls go through Next.js API routes (server-side proxy).
+// This avoids CORS issues and keeps the AI service URL private.
 
 // ── Ingest ────────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,7 @@ export interface IngestResponse {
 }
 
 export async function syncGitHub(payload: IngestRequest): Promise<IngestResponse> {
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/ingest`, {
+  const res = await fetch('/api/ai/ingest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -45,7 +45,7 @@ export interface MatchResponse {
 }
 
 export async function findMatches(payload: MatchRequest): Promise<MatchResponse> {
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/match`, {
+  const res = await fetch('/api/ai/match', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -72,7 +72,7 @@ export interface PersonaResponse {
 }
 
 export async function getPersona(payload: PersonaRequest): Promise<PersonaResponse> {
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/persona`, {
+  const res = await fetch('/api/ai/persona', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
