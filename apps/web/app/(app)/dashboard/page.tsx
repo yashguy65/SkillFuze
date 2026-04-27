@@ -26,7 +26,6 @@ export default async function Dashboard() {
     { id: 6, username: 'jess_marketing', bio: 'Growth hacker connecting tech with people.', skills: ['SEO', 'Content', 'Analytics'], avatar: 'J' },
   ];
 
-  const userInitial = user.user_metadata?.user_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U';
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
