@@ -22,10 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="SkillFuze AI Service", lifespan=lifespan)
 
-# Add CORS middleware
+# Get allowed origins from env, defaulting to localhost and wildcard for Vercel
+# Strict CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_origins=[
+        "https://skillfuze.vercel.app",
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
