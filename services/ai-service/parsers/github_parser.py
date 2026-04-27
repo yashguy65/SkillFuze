@@ -100,6 +100,6 @@ class GitHubParser:
                     pass
 
                 repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguages: {lang_names}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
-                documents.append(Document(page_content=repo_content, metadata={"user_id": user_id, "source": "github", "repo": repo_name}))
+                documents.append(Document(page_content=repo_content, metadata={"user_id": user_id, "source": "github", "repo": repo_name, "languages": languages}))
 
             return documents
