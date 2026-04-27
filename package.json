@@ -11,7 +11,7 @@
   "license": "ISC",
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": "20.x"
+    "node": ">=20.x"
   },
   "devDependencies": {
     "turbo": "^2.9.6"
