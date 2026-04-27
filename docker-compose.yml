@@ -17,5 +17,7 @@ services:
 
   ai-service:
     build: ./services/ai-service
+    env_file:
+      - ./services/ai-service/.env
     ports:
       - "8000:8000"
