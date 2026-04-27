@@ -7,38 +7,9 @@ import { Bell, Search, Filter, Sparkles, Loader2, AlertTriangle, RefreshCw, User
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface MockUser {
-  id: number
-  username: string
-  bio: string
-  skills: string[]
-  avatar: string
-}
-
 type MatchState = 'idle' | 'loading' | 'success' | 'error'
 
-// ─── Mock user lookup (mirrors the stub data in the AI service) ───────────────
-
-const MOCK_USER_DB: Record<string, MockUser> = {
-  user_123: { id: 101, username: 'alex_dev',       bio: 'Full-stack builder passionate about AI and edge computing.',       skills: ['React', 'Node.js', 'Python'],           avatar: 'A' },
-  user_456: { id: 102, username: 'sarah_design',   bio: 'UX/UI designer looking to collaborate on fintech startups.',      skills: ['Figma', 'CSS', 'UX Research'],          avatar: 'S' },
-  user_789: { id: 103, username: 'mike_data',      bio: 'Data scientist building predictive models for e-commerce.',       skills: ['Python', 'SQL', 'TensorFlow'],          avatar: 'M' },
-  user_321: { id: 104, username: 'emily_mobile',   bio: 'iOS developer creating accessible applications for everyone.',    skills: ['Swift', 'Objective-C', 'UI Kit'],       avatar: 'E' },
-  user_654: { id: 105, username: 'chris_cloud',    bio: 'DevOps engineer scaling infrastructure for high-growth startups.',skills: ['AWS', 'Docker', 'Kubernetes'],          avatar: 'C' },
-  user_987: { id: 106, username: 'jess_marketing', bio: 'Growth hacker bridging the gap between tech products and users.', skills: ['SEO', 'Content', 'Analytics'],          avatar: 'J' },
-}
-
-function resolveUser(matchResult: MatchResult): MockUser {
-  return (
-    MOCK_USER_DB[matchResult.user_id] ?? {
-      id:       parseInt(matchResult.user_id.replace(/\D/g, '')) || 999,
-      username: matchResult.user_id,
-      bio:      'AI-matched collaborator.',
-      skills:   [],
-      avatar:   matchResult.user_id[0]?.toUpperCase() ?? '?',
-    }
-  )
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function similarityLabel(score: number): { text: string; color: string } {
   if (score >= 0.9) return { text: 'Excellent match', color: 'text-teal-400' }
@@ -47,9 +18,17 @@ function similarityLabel(score: number): { text: string; color: string } {
   return                     { text: 'Possible match', color: 'text-slate-400'  }
 }
 
-// ─── Discover card for browse/mock tab ───────────────────────────────────────
+// ─── Discover card for browse tab (static showcase) ───────────────────────────
 
-const DISCOVER_USERS: MockUser[] = [
+interface DiscoverUser {
+  id: number
+  username: string
+  bio: string
+  skills: string[]
+  avatar: string
+}
+
+const DISCOVER_USERS: DiscoverUser[] = [
   { id: 1,  username: 'alex_dev',       bio: 'Full-stack builder passionate about AI and edge computing.',       skills: ['React', 'Node.js', 'Python'],           avatar: 'A' },
   { id: 2,  username: 'sarah_design',   bio: 'UX/UI designer looking to collaborate on fintech startups.',      skills: ['Figma', 'CSS', 'UX Research'],          avatar: 'S' },
   { id: 3,  username: 'mike_data',      bio: 'Data scientist building predictive models for e-commerce.',       skills: ['Python', 'SQL', 'TensorFlow'],          avatar: 'M' },
@@ -60,9 +39,8 @@ const DISCOVER_USERS: MockUser[] = [
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function UserCard({ user, similarity }: { user: MockUser; similarity?: number }) {
-  const label = similarity !== undefined ? similarityLabel(similarity) : null
-
+/** Card used in the static "Discover" tab */
+function DiscoverCard({ user }: { user: DiscoverUser }) {
   return (
     <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
       <div className="flex items-center gap-4 mb-4">
@@ -73,20 +51,9 @@ function UserCard({ user, similarity }: { user: MockUser; similarity?: number })
           <h3 className="font-semibold text-slate-200 group-hover:text-teal-400 transition-colors truncate">
             @{user.username}
           </h3>
-          {label && (
-            <p className={`text-xs font-medium ${label.color} flex items-center gap-1 mt-0.5`}>
-              <Zap className="w-3 h-3" />
-              {label.text}
-              <span className="ml-auto text-slate-500">
-                {Math.round(similarity! * 100)}%
-              </span>
-            </p>
-          )}
         </div>
       </div>
-
       <p className="text-sm text-slate-400 mb-6 line-clamp-2 font-light">{user.bio}</p>
-
       <div className="flex flex-wrap gap-2">
         {user.skills.map(skill => (
           <span
@@ -101,20 +68,105 @@ function UserCard({ user, similarity }: { user: MockUser; similarity?: number })
   )
 }
 
+/** Card used for real AI match results */
+function MatchCard({ match }: { match: MatchResult }) {
+  const label = similarityLabel(match.similarity)
+  const displayName = match.github_username || match.user_id.substring(0, 8)
+  const avatarUrl = match.github_username
+    ? `https://github.com/${match.github_username}.png?size=96`
+    : null
+
+  return (
+    <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-teal-400 group-hover:bg-teal-500/10 group-hover:text-teal-300 transition-colors border border-slate-700/50 overflow-hidden">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback to initial letter if GitHub avatar fails
+                const el = e.currentTarget
+                el.style.display = 'none'
+                el.parentElement!.textContent = displayName[0]?.toUpperCase() ?? '?'
+              }}
+            />
+          ) : (
+            displayName[0]?.toUpperCase() ?? '?'
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-slate-200 group-hover:text-teal-400 transition-colors truncate">
+            {match.github_username ? (
+              <a
+                href={`https://github.com/${match.github_username}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                @{displayName}
+              </a>
+            ) : (
+              `@${displayName}`
+            )}
+          </h3>
+          <p className={`text-xs font-medium ${label.color} flex items-center gap-1 mt-0.5`}>
+            <Zap className="w-3 h-3" />
+            {label.text}
+            <span className="ml-auto text-slate-500">
+              {Math.round(match.similarity * 100)}%
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <p className="text-sm text-slate-400 mb-6 line-clamp-2 font-light">
+        AI-matched collaborator based on code, skills & interests.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        {match.skills.length > 0 ? (
+          match.skills.map(skill => (
+            <span
+              key={skill}
+              className="px-3 py-1 bg-teal-500/10 text-xs text-teal-400 rounded-full font-medium border border-teal-500/20 group-hover:border-teal-500/40 transition-colors"
+            >
+              {skill}
+            </span>
+          ))
+        ) : (
+          <span className="px-3 py-1 bg-slate-950 text-xs text-slate-500 rounded-full font-medium border border-slate-800">
+            No skills data
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null)
+  const [customTags, setCustomTags] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'discover' | 'matches'>('discover')
   const [matchState, setMatchState] = useState<MatchState>('idle')
   const [matchError, setMatchError] = useState('')
-  const [matchedUsers, setMatchedUsers] = useState<Array<{ user: MockUser; similarity: number }>>([])
+  const [matchedResults, setMatchedResults] = useState<MatchResult[]>([])
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) window.location.href = '/login'
       setUserId(user?.id ?? null)
+
+      // Load custom tags from user metadata so we can pass them to the match API
+      if (user?.user_metadata?.custom_tags) {
+        setCustomTags(user.user_metadata.custom_tags)
+      }
     })
   }, [])
 
@@ -125,16 +177,18 @@ export default function Dashboard() {
     setActiveTab('matches')
 
     try {
-      const { matches } = await findMatches({ user_id: userId, top_k: 6 })
-      setMatchedUsers(
-        matches.map(m => ({ user: resolveUser(m), similarity: m.similarity }))
-      )
+      const { matches } = await findMatches({
+        user_id: userId,
+        top_k: 6,
+        custom_tags: customTags.length > 0 ? customTags : undefined,
+      })
+      setMatchedResults(matches)
       setMatchState('success')
     } catch (err: unknown) {
       setMatchError(err instanceof Error ? err.message : 'Could not load matches.')
       setMatchState('error')
     }
-  }, [userId])
+  }, [userId, customTags])
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
@@ -222,7 +276,7 @@ export default function Dashboard() {
                   {tab}
                   {tab === 'matches' && matchState === 'success' && (
                     <span className="ml-1 px-1.5 py-0.5 bg-teal-500 text-slate-950 text-xs font-bold rounded-full">
-                      {matchedUsers.length}
+                      {matchedResults.length}
                     </span>
                   )}
                 </button>
@@ -239,7 +293,7 @@ export default function Dashboard() {
                 {activeTab === 'discover' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {DISCOVER_USERS.map(u => (
-                      <UserCard key={u.id} user={u} />
+                      <DiscoverCard key={u.id} user={u} />
                     ))}
                   </div>
                 )}
@@ -286,7 +340,7 @@ export default function Dashboard() {
                     )}
 
                     {/* Success */}
-                    {matchState === 'success' && matchedUsers.length === 0 && (
+                    {matchState === 'success' && matchedResults.length === 0 && (
                       <div className="flex flex-col items-center justify-center py-24 text-slate-500">
                         <Users className="w-12 h-12 mb-4 opacity-30" />
                         <p className="text-lg font-medium">No matches found</p>
@@ -296,14 +350,14 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    {matchState === 'success' && matchedUsers.length > 0 && (
+                    {matchState === 'success' && matchedResults.length > 0 && (
                       <>
                         <p className="text-xs text-slate-500 mb-4">
-                          {matchedUsers.length} collaborators ranked by embedding similarity
+                          {matchedResults.length} collaborators ranked by embedding similarity
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                          {matchedUsers.map(({ user, similarity }) => (
-                            <UserCard key={user.id} user={user} similarity={similarity} />
+                          {matchedResults.map((match) => (
+                            <MatchCard key={match.user_id} match={match} />
                           ))}
                         </div>
                       </>

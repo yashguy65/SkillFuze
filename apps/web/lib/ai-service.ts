@@ -33,11 +33,14 @@ export async function syncGitHub(payload: IngestRequest): Promise<IngestResponse
 export interface MatchRequest {
   user_id: string
   top_k?: number
+  custom_tags?: string[]
 }
 
 export interface MatchResult {
   user_id: string
   similarity: number
+  github_username: string
+  skills: string[]
 }
 
 export interface MatchResponse {
