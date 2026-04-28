@@ -13,9 +13,9 @@ type MatchState = 'idle' | 'loading' | 'success' | 'error'
 
 function similarityLabel(score: number): { text: string; color: string } {
   if (score >= 0.9) return { text: 'Excellent match', color: 'text-teal-400' }
-  if (score >= 0.75) return { text: 'Strong match',   color: 'text-blue-400'  }
-  if (score >= 0.6)  return { text: 'Good match',     color: 'text-indigo-400' }
-  return                     { text: 'Possible match', color: 'text-slate-400'  }
+  if (score >= 0.75) return { text: 'Strong match', color: 'text-blue-400' }
+  if (score >= 0.6) return { text: 'Good match', color: 'text-indigo-400' }
+  return { text: 'Possible match', color: 'text-slate-400' }
 }
 
 // ─── Discover card for browse tab (static showcase) ───────────────────────────
@@ -29,12 +29,12 @@ interface DiscoverUser {
 }
 
 const DISCOVER_USERS: DiscoverUser[] = [
-  { id: 1,  username: 'alex_dev',       bio: 'Full-stack builder passionate about AI and edge computing.',       skills: ['React', 'Node.js', 'Python'],           avatar: 'A' },
-  { id: 2,  username: 'sarah_design',   bio: 'UX/UI designer looking to collaborate on fintech startups.',      skills: ['Figma', 'CSS', 'UX Research'],          avatar: 'S' },
-  { id: 3,  username: 'mike_data',      bio: 'Data scientist building predictive models for e-commerce.',       skills: ['Python', 'SQL', 'TensorFlow'],          avatar: 'M' },
-  { id: 4,  username: 'emily_mobile',   bio: 'iOS developer creating accessible applications.',                  skills: ['Swift', 'Objective-C', 'UI Kit'],       avatar: 'E' },
-  { id: 5,  username: 'chris_cloud',    bio: 'DevOps engineer scaling infrastructure.',                          skills: ['AWS', 'Docker', 'Kubernetes'],          avatar: 'C' },
-  { id: 6,  username: 'jess_marketing', bio: 'Growth hacker connecting tech with people.',                       skills: ['SEO', 'Content', 'Analytics'],          avatar: 'J' },
+  { id: 1, username: 'alex_dev', bio: 'Full-stack builder passionate about AI and edge computing.', skills: ['React', 'Node.js', 'Python'], avatar: 'A' },
+  { id: 2, username: 'sarah_design', bio: 'UX/UI designer looking to collaborate on fintech startups.', skills: ['Figma', 'CSS', 'UX Research'], avatar: 'S' },
+  { id: 3, username: 'mike_data', bio: 'Data scientist building predictive models for e-commerce.', skills: ['Python', 'SQL', 'TensorFlow'], avatar: 'M' },
+  { id: 4, username: 'emily_mobile', bio: 'iOS developer creating accessible applications.', skills: ['Swift', 'Objective-C', 'UI Kit'], avatar: 'E' },
+  { id: 5, username: 'chris_cloud', bio: 'DevOps engineer scaling infrastructure.', skills: ['AWS', 'Docker', 'Kubernetes'], avatar: 'C' },
+  { id: 6, username: 'jess_marketing', bio: 'Growth hacker connecting tech with people.', skills: ['SEO', 'Content', 'Analytics'], avatar: 'J' },
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5" />
-                    Find AI Matches
+                    Find Matches
                     <span className="text-white/60 text-sm font-normal">— powered by embeddings</span>
                   </>
                 )}
