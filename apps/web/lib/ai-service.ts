@@ -28,12 +28,40 @@ export async function syncGitHub(payload: IngestRequest): Promise<IngestResponse
   return res.json() as Promise<IngestResponse>
 }
 
+// ── Tags Ingest ───────────────────────────────────────────────────────────────
+
+export interface TagsIngestRequest {
+  user_id: string
+  tags: string[]
+}
+
+export interface TagsIngestResponse {
+  success: boolean
+  chunks_stored: number
+}
+
+export async function ingestTags(payload: TagsIngestRequest): Promise<TagsIngestResponse> {
+  const res = await fetch('/api/ai/tags', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? 'Failed to ingest tags')
+  }
+
+  return res.json() as Promise<TagsIngestResponse>
+}
+
 // ── Match ─────────────────────────────────────────────────────────────────────
 
 export interface MatchRequest {
   user_id: string
   top_k?: number
   custom_tags?: string[]
+  search_query?: string
 }
 
 export interface MatchResult {

@@ -50,6 +50,12 @@ async def match_users(request: MatchRequest):
         # 60% user GitHub data, 40% custom tags
         query_embedding = query_embedding * 0.6 + tags_embedding * 0.4
 
+    # ── 2.5. Use search query if provided ────────────────────────────────────
+    if request.search_query:
+        # If the user explicitly searches, overwrite the profile context entirely.
+        # This ensures pure semantic search based on their exact keywords.
+        query_embedding = np.array(embedder.embed_query(request.search_query))
+
     # Normalise so cosine distance stays meaningful
     norm = np.linalg.norm(query_embedding)
     if norm > 0:
@@ -129,10 +135,46 @@ async def match_users(request: MatchRequest):
     results: list[MatchResult] = []
     for uid, info in user_best.items():
         top_skills = [lang for lang, _ in skills_map.get(uid, Counter()).most_common(5)]
+        
+        sim = info["similarity"]
+        # Hybrid Search: Give a significant boost if the search query matches a tag/language
+        if request.search_query:
+            sq_lower = request.search_query.lower().strip()
+            user_langs = list(skills_map.get(uid, Counter()).keys())
+            
+            matched_exact = False
+            matched_partial = False
+            matched_lang = None
+            
+            for l in user_langs:
+                l_clean = l.lower().strip()
+                if sq_lower == l_clean:
+                    matched_exact = True
+                    matched_lang = l
+                    break
+                elif sq_lower in l_clean:
+                    matched_partial = True
+                    if not matched_lang:
+                        matched_lang = l
+            
+            if matched_exact:
+                sim = max(sim + 0.50, 0.99)
+            elif matched_partial:
+                sim += 0.30
+                
+            # Force the matched tag to be visible in the UI so the user understands WHY they matched
+            if matched_lang and matched_lang not in top_skills:
+                top_skills.insert(0, matched_lang)
+                if len(top_skills) > 5:
+                    top_skills.pop()
+                
+        # Clamp to max 1.0 to prevent weird >100% UI bugs
+        sim = min(sim, 1.0)
+                
         results.append(
             MatchResult(
                 user_id=uid,
-                similarity=info["similarity"],
+                similarity=sim,
                 github_username=username_map.get(uid, uid),
                 skills=top_skills,
             )

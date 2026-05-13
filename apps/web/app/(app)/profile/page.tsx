@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { syncGitHub, getPersona } from '@/lib/ai-service'
+import { syncGitHub, getPersona, ingestTags } from '@/lib/ai-service'
 import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink, Plus, X } from 'lucide-react'
 
 type SyncStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -16,11 +16,20 @@ export default function ProfilePage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [syncMessage, setSyncMessage] = useState('')
   const [skills, setSkills] = useState<string[]>([])
-  
+
   // Custom Tags State
   const [customTags, setCustomTags] = useState<string[]>([])
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTagVal, setNewTagVal] = useState('')
+  const [preference, setPreference] = useState<string>('Just exploring')
+  const [isSavingPref, setIsSavingPref] = useState(false)
+
+  const PREFERENCES = [
+    'Looking for a co-founder',
+    'Looking for a teammate',
+    'Open to collaborate',
+    'Just exploring'
+  ]
 
   useEffect(() => {
     const supabase = createClient()
@@ -30,11 +39,14 @@ export default function ProfilePage() {
       setUser(user as any)
 
       if (user) {
-        // Load custom tags from metadata
+        // Load custom tags and preference from metadata
         if (user.user_metadata?.custom_tags) {
           setCustomTags(user.user_metadata.custom_tags)
         }
-        
+        if (user.user_metadata?.preference) {
+          setPreference(user.user_metadata.preference)
+        }
+
         getPersona({ user_id: user.id })
           .then(data => setSkills(data.skills))
           .catch(() => setSkills([]))
@@ -45,7 +57,7 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="w-8 h-8 text-teal-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
       </div>
     )
   }
@@ -91,7 +103,7 @@ export default function ProfilePage() {
 
   const handleAddTag = async () => {
     if (!newTagVal.trim() || !user) return
-    
+
     const tag = newTagVal.trim()
     if (customTags.includes(tag)) {
       setNewTagVal('')
@@ -104,12 +116,56 @@ export default function ProfilePage() {
     const { error } = await supabase.auth.updateUser({
       data: { custom_tags: updatedTags }
     })
-    
+
     if (!error) {
       setCustomTags(updatedTags)
       setNewTagVal('')
       setIsAddingTag(false)
+
+      // Sync tags to embeddings database
+      try {
+        await ingestTags({ user_id: user.id, tags: updatedTags })
+      } catch (err) {
+        console.error('Failed to sync tags to AI service', err)
+      }
     }
+  }
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    if (!user) return
+
+    const updatedTags = customTags.filter(tag => tag !== tagToRemove)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: { custom_tags: updatedTags }
+    })
+
+    if (!error) {
+      setCustomTags(updatedTags)
+      setSkills(prev => prev.filter(s => s !== tagToRemove))
+
+      // Sync updated tags to embeddings database
+      try {
+        await ingestTags({ user_id: user.id, tags: updatedTags })
+      } catch (err) {
+        console.error('Failed to sync tags to AI service', err)
+      }
+    }
+  }
+
+  const handlePreferenceChange = async (newPref: string) => {
+    if (!user || newPref === preference) return
+    setIsSavingPref(true)
+    
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: { preference: newPref }
+    })
+
+    if (!error) {
+      setPreference(newPref)
+    }
+    setIsSavingPref(false)
   }
 
   const syncButtonContent = () => {
@@ -146,14 +202,14 @@ export default function ProfilePage() {
   }
 
   const syncButtonClass = {
-    idle: 'bg-slate-800 hover:bg-teal-500/10 text-slate-200 hover:text-teal-300 border border-slate-700 hover:border-teal-500/40',
+    idle: 'bg-slate-800 hover:bg-blue-500/10 text-slate-200 hover:text-blue-300 border border-slate-700 hover:border-blue-500/40',
     loading: 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed',
-    success: 'bg-teal-500/10 text-teal-300 border border-teal-500/40',
+    success: 'bg-blue-500/10 text-blue-300 border border-blue-500/40',
     error: 'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20',
   }[syncStatus]
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       <main className="w-full max-w-md bg-slate-900/50 border border-slate-800 rounded-3xl p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col items-center">
 
         {/* Header */}
@@ -175,7 +231,7 @@ export default function ProfilePage() {
             href={`https://github.com/${githubUsername}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-teal-400 transition-colors mb-8"
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-blue-400 transition-colors mb-8"
           >
             <GitBranch className="w-4 h-4" />
             github.com/{githubUsername}
@@ -190,7 +246,7 @@ export default function ProfilePage() {
               GitHub Sync
             </h2>
             {syncStatus === 'success' && (
-              <span className="text-xs text-teal-400 font-medium">
+              <span className="text-xs text-blue-400 font-medium">
                 ✓ Up to date
               </span>
             )}
@@ -214,7 +270,7 @@ export default function ProfilePage() {
           {syncMessage && (
             <p
               className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${syncMessage.includes('complete') || syncStatus === 'success'
-                ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                 : 'bg-red-500/10 text-red-400 border border-red-500/20'
                 }`}
             >
@@ -227,6 +283,29 @@ export default function ProfilePage() {
           </p>
         </div>
 
+        {/* ── Collaboration Preference ───────────────────────────────────── */}
+        <div className="w-full mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider ml-1">
+              Collaboration Preference
+            </h2>
+            {isSavingPref && (
+              <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+            )}
+          </div>
+          
+          <select
+            value={preference}
+            onChange={(e) => handlePreferenceChange(e.target.value)}
+            disabled={isSavingPref}
+            className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 appearance-none disabled:opacity-50 transition-colors"
+          >
+            {PREFERENCES.map(pref => (
+              <option key={pref} value={pref}>{pref}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Tags */}
         <div className="w-full mb-8">
           <div className="flex items-center justify-between mb-3">
@@ -234,33 +313,33 @@ export default function ProfilePage() {
               Tags
             </h2>
             {!isAddingTag && (
-              <button 
+              <button
                 onClick={() => setIsAddingTag(true)}
-                className="text-slate-400 hover:text-teal-400 transition-colors bg-slate-800 rounded-full p-1 border border-slate-700 hover:border-teal-500/40"
+                className="text-slate-400 hover:text-blue-400 transition-colors bg-slate-800 rounded-full p-1 border border-slate-700 hover:border-blue-500/40"
               >
                 <Plus className="w-4 h-4" />
               </button>
             )}
           </div>
-          
+
           {isAddingTag && (
             <div className="flex items-center gap-2 mb-4">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={newTagVal}
                 onChange={e => setNewTagVal(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAddTag()}
                 autoFocus
                 placeholder="New custom tag..."
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-teal-500/50 text-slate-200"
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500/50 text-slate-200"
               />
-              <button 
+              <button
                 onClick={handleAddTag}
-                className="bg-teal-500/20 text-teal-400 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-teal-500/30 transition-colors"
+                className="bg-blue-500/20 text-blue-400 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-500/30 transition-colors"
               >
                 Add
               </button>
-              <button 
+              <button
                 onClick={() => setIsAddingTag(false)}
                 className="text-slate-500 hover:text-slate-300 px-2"
               >
@@ -273,20 +352,30 @@ export default function ProfilePage() {
             {customTags.map(tag => (
               <span
                 key={`custom-${tag}`}
-                className="px-4 py-1.5 bg-slate-800 text-slate-300 rounded-full text-sm font-medium border border-slate-700"
+                className="group relative px-4 py-1.5 bg-slate-800 text-slate-300 rounded-full text-sm font-medium border border-slate-700 hover:border-white/50 hover:bg-slate-800/80 transition-colors flex items-center"
               >
                 {tag}
+                <button
+                  onClick={() => handleRemoveTag(tag)}
+                  className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                  aria-label={`Remove ${tag} tag`}
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
               </span>
             ))}
             {skills.length > 0 ? (
-              [...skills].reverse().map(skill => (
-                <span
-                  key={skill}
-                  className="px-4 py-1.5 bg-teal-500/10 text-teal-400 rounded-full text-sm font-medium border border-teal-500/20"
-                >
-                  {skill}
-                </span>
-              ))
+              [...skills]
+                .filter(skill => !customTags.includes(skill))
+                .reverse()
+                .map(skill => (
+                  <span
+                    key={skill}
+                    className="px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20"
+                  >
+                    {skill}
+                  </span>
+                ))
             ) : (
               customTags.length === 0 && (
                 <span className="text-sm text-slate-500 italic ml-1">
@@ -301,20 +390,20 @@ export default function ProfilePage() {
 
         {/* Quick Actions */}
         <div className="w-full space-y-3 pt-6 border-t border-slate-800">
-          <button className="flex items-center gap-2 text-slate-400 hover:text-teal-400 transition-colors group w-full text-left text-sm font-medium">
-            <span className="text-teal-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
+          <button className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium">
+            <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
             Change Password
           </button>
-          <button className="flex items-center gap-2 text-slate-400 hover:text-teal-400 transition-colors group w-full text-left text-sm font-medium">
-            <span className="text-teal-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
+          <button className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium">
+            <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
             Add LinkedIn
           </button>
           <button
             onClick={handleSyncGitHub}
             disabled={syncStatus === 'loading'}
-            className="flex items-center gap-2 text-slate-400 hover:text-teal-400 transition-colors group w-full text-left text-sm font-medium disabled:opacity-50"
+            className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 text-teal-500 ${syncStatus === 'loading' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+            <RefreshCw className={`w-4 h-4 text-blue-500 ${syncStatus === 'loading' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
             Re-sync GitHub Data
           </button>
         </div>

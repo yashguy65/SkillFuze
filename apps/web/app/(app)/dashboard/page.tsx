@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { findMatches, MatchResult } from '@/lib/ai-service'
-import { Bell, Search, Filter, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap } from 'lucide-react'
+import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ type MatchState = 'idle' | 'loading' | 'success' | 'error'
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function similarityLabel(score: number): { text: string; color: string } {
-  if (score >= 0.9) return { text: 'Excellent match', color: 'text-teal-400' }
+  if (score >= 0.9) return { text: 'Excellent match', color: 'text-blue-400' }
   if (score >= 0.75) return { text: 'Strong match', color: 'text-blue-400' }
   if (score >= 0.6) return { text: 'Good match', color: 'text-indigo-400' }
   return { text: 'Possible match', color: 'text-slate-400' }
@@ -21,20 +21,19 @@ function similarityLabel(score: number): { text: string; color: string } {
 // ─── Discover card for browse tab (static showcase) ───────────────────────────
 
 interface DiscoverUser {
-  id: number
+  id: string | number
   username: string
   bio: string
   skills: string[]
   avatar: string
+  preference?: string
 }
 
-const DISCOVER_USERS: DiscoverUser[] = [
-  { id: 1, username: 'alex_dev', bio: 'Full-stack builder passionate about AI and edge computing.', skills: ['React', 'Node.js', 'Python'], avatar: 'A' },
-  { id: 2, username: 'sarah_design', bio: 'UX/UI designer looking to collaborate on fintech startups.', skills: ['Figma', 'CSS', 'UX Research'], avatar: 'S' },
-  { id: 3, username: 'mike_data', bio: 'Data scientist building predictive models for e-commerce.', skills: ['Python', 'SQL', 'TensorFlow'], avatar: 'M' },
-  { id: 4, username: 'emily_mobile', bio: 'iOS developer creating accessible applications.', skills: ['Swift', 'Objective-C', 'UI Kit'], avatar: 'E' },
-  { id: 5, username: 'chris_cloud', bio: 'DevOps engineer scaling infrastructure.', skills: ['AWS', 'Docker', 'Kubernetes'], avatar: 'C' },
-  { id: 6, username: 'jess_marketing', bio: 'Growth hacker connecting tech with people.', skills: ['SEO', 'Content', 'Analytics'], avatar: 'J' },
+const PREFERENCES = [
+  'Looking for a co-founder',
+  'Looking for a teammate',
+  'Open to collaborate',
+  'Just exploring'
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -44,11 +43,16 @@ function DiscoverCard({ user }: { user: DiscoverUser }) {
   return (
     <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
       <div className="flex items-center gap-4 mb-4">
-        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-teal-400 group-hover:bg-teal-500/10 group-hover:text-teal-300 transition-colors border border-slate-700/50">
-          {user.avatar}
+        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-blue-400 group-hover:bg-blue-500/10 group-hover:text-blue-300 transition-colors border border-slate-700/50 overflow-hidden">
+          {user.avatar && user.avatar.startsWith('http') ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+          ) : (
+            user.username?.[0]?.toUpperCase() ?? 'U'
+          )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-slate-200 group-hover:text-teal-400 transition-colors truncate">
+          <h3 className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors truncate">
             @{user.username}
           </h3>
         </div>
@@ -79,7 +83,7 @@ function MatchCard({ match }: { match: MatchResult }) {
   return (
     <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
       <div className="flex items-center gap-4 mb-4">
-        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-teal-400 group-hover:bg-teal-500/10 group-hover:text-teal-300 transition-colors border border-slate-700/50 overflow-hidden">
+        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-blue-400 group-hover:bg-blue-500/10 group-hover:text-blue-300 transition-colors border border-slate-700/50 overflow-hidden">
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -98,7 +102,7 @@ function MatchCard({ match }: { match: MatchResult }) {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-slate-200 group-hover:text-teal-400 transition-colors truncate">
+          <h3 className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors truncate">
             {match.github_username ? (
               <a
                 href={`https://github.com/${match.github_username}`}
@@ -124,7 +128,7 @@ function MatchCard({ match }: { match: MatchResult }) {
       </div>
 
       <p className="text-sm text-slate-400 mb-6 line-clamp-2 font-light">
-        AI-matched collaborator based on code, skills & interests.
+
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -132,7 +136,7 @@ function MatchCard({ match }: { match: MatchResult }) {
           match.skills.map(skill => (
             <span
               key={skill}
-              className="px-3 py-1 bg-teal-500/10 text-xs text-teal-400 rounded-full font-medium border border-teal-500/20 group-hover:border-teal-500/40 transition-colors"
+              className="px-3 py-1 bg-blue-500/10 text-xs text-blue-400 rounded-full font-medium border border-blue-500/20 group-hover:border-blue-500/40 transition-colors"
             >
               {skill}
             </span>
@@ -156,18 +160,30 @@ export default function Dashboard() {
   const [matchState, setMatchState] = useState<MatchState>('idle')
   const [matchError, setMatchError] = useState('')
   const [matchedResults, setMatchedResults] = useState<MatchResult[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
+  const [isLoadingDiscover, setIsLoadingDiscover] = useState(true)
 
   useEffect(() => {
+    // Fetch auth
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) window.location.href = '/login'
       setUserId(user?.id ?? null)
 
-      // Load custom tags from user metadata so we can pass them to the match API
       if (user?.user_metadata?.custom_tags) {
         setCustomTags(user.user_metadata.custom_tags)
       }
     })
+
+    // Fetch dynamic discover users
+    fetch('/api/users/discover')
+      .then(res => res.json())
+      .then(data => {
+        if (data.users) setDiscoverUsers(data.users)
+      })
+      .catch(err => console.error('Failed to load discover users', err))
+      .finally(() => setIsLoadingDiscover(false))
   }, [])
 
   const handleFindMatches = useCallback(async () => {
@@ -181,6 +197,7 @@ export default function Dashboard() {
         user_id: userId,
         top_k: 6,
         custom_tags: customTags.length > 0 ? customTags : undefined,
+        search_query: searchQuery.trim() || undefined,
       })
       setMatchedResults(matches)
       setMatchState('success')
@@ -188,10 +205,10 @@ export default function Dashboard() {
       setMatchError(err instanceof Error ? err.message : 'Could not load matches.')
       setMatchState('error')
     }
-  }, [userId, customTags])
+  }, [userId, customTags, searchQuery])
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-teal-500/30">
+    <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* ── Top Bar ─────────────────────────────────────────────────────── */}
@@ -201,7 +218,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <button className="p-2 text-slate-400 hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-teal-500 rounded-full shadow-[0_0_8px_rgba(20,184,166,0.8)]" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
             </button>
           </div>
         </header>
@@ -211,14 +228,20 @@ export default function Dashboard() {
 
             {/* ── AI Search + Find Matches CTA ──────────────────────────── */}
             <div className="relative mb-8 max-w-2xl mx-auto group mt-4">
-              <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-              <div className="relative flex items-center bg-slate-900 border border-slate-700 hover:border-teal-500/50 rounded-full p-2 pl-6 shadow-lg transition-all">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              <div className="relative flex items-center bg-slate-900 border border-slate-700 hover:border-blue-500/50 rounded-full p-2 pl-6 shadow-lg transition-all">
                 <input
                   type="text"
                   placeholder="I'm building…"
                   className="flex-1 bg-transparent border-none outline-none text-slate-200 placeholder:text-slate-500 text-lg"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleFindMatches()}
                 />
-                <button className="bg-teal-500 hover:bg-teal-400 text-slate-950 p-3 rounded-full transition-colors ml-2 shadow-[0_0_15px_rgba(20,184,166,0.3)]">
+                <button
+                  onClick={handleFindMatches}
+                  className="bg-blue-500 hover:bg-blue-400 text-slate-950 p-3 rounded-full transition-colors ml-2 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                >
                   <Search className="w-5 h-5" />
                 </button>
               </div>
@@ -233,11 +256,11 @@ export default function Dashboard() {
                 className="
                   w-full relative overflow-hidden flex items-center justify-center gap-3
                   px-6 py-4 rounded-2xl font-semibold text-base
-                  bg-gradient-to-r from-teal-600 to-blue-600
-                  hover:from-teal-500 hover:to-blue-500
+                  bg-gradient-to-r from-blue-600 to-blue-600
+                  hover:from-blue-500 hover:to-blue-500
                   disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
-                  text-white shadow-[0_4px_32px_-4px_rgba(20,184,166,0.4)]
-                  hover:shadow-[0_4px_40px_-4px_rgba(20,184,166,0.6)]
+                  text-white shadow-[0_4px_32px_-4px_rgba(59,130,246,0.4)]
+                  hover:shadow-[0_4px_40px_-4px_rgba(59,130,246,0.6)]
                   transition-all duration-300 group
                 "
               >
@@ -268,14 +291,14 @@ export default function Dashboard() {
                   className={`
                     flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all
                     ${activeTab === tab
-                      ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                       : 'text-slate-400 hover:text-slate-200'}
                   `}
                 >
                   {tab === 'discover' ? <Users className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
                   {tab}
                   {tab === 'matches' && matchState === 'success' && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-teal-500 text-slate-950 text-xs font-bold rounded-full">
+                    <span className="ml-1 px-1.5 py-0.5 bg-blue-500 text-slate-950 text-xs font-bold rounded-full">
                       {matchedResults.length}
                     </span>
                   )}
@@ -291,10 +314,37 @@ export default function Dashboard() {
 
                 {/* DISCOVER TAB */}
                 {activeTab === 'discover' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {DISCOVER_USERS.map(u => (
-                      <DiscoverCard key={u.id} user={u} />
-                    ))}
+                  <div className="space-y-12 pb-12">
+                    {isLoadingDiscover ? (
+                      <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+                        <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
+                        <p className="font-medium">Loading network...</p>
+                      </div>
+                    ) : discoverUsers.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-24 text-slate-500">
+                        <Users className="w-12 h-12 mb-4 opacity-30" />
+                        <p className="text-lg font-medium">No users found</p>
+                        <p className="text-sm mt-1">Check back later when more people join.</p>
+                      </div>
+                    ) : (
+                      PREFERENCES.map(pref => {
+                        const users = discoverUsers.filter(u => u.preference === pref && u.id !== userId)
+                        if (users.length === 0) return null
+
+                        return (
+                          <div key={pref}>
+                            <h2 className="text-xl font-bold text-slate-200 mb-4 pl-2 border-l-4 border-blue-500">{pref}</h2>
+                            <div className="flex overflow-x-auto pb-6 gap-6 snap-x -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
+                              {users.map(u => (
+                                <div key={u.id} className="min-w-[300px] max-w-[320px] snap-start flex-none">
+                                  <DiscoverCard user={u} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 )}
 
@@ -308,7 +358,7 @@ export default function Dashboard() {
                         <p className="text-lg font-medium">No matches yet</p>
                         <p className="text-sm mt-1">
                           Click{' '}
-                          <span className="text-teal-400 font-semibold">Find AI Matches</span>{' '}
+                          <span className="text-blue-400 font-semibold">Find AI Matches</span>{' '}
                           to get started.
                         </p>
                       </div>
@@ -317,7 +367,7 @@ export default function Dashboard() {
                     {/* Loading */}
                     {matchState === 'loading' && (
                       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-                        <Loader2 className="w-10 h-10 text-teal-400 animate-spin mb-4" />
+                        <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
                         <p className="font-medium">Scanning your profile…</p>
                         <p className="text-sm mt-1 text-slate-500">Running semantic similarity search</p>
                       </div>
@@ -365,67 +415,6 @@ export default function Dashboard() {
                   </>
                 )}
               </div>
-
-              {/* ── Right Sidebar (Filters) ────────────────────────────── */}
-              <aside className="w-full lg:w-64 shrink-0">
-                <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 sticky top-6">
-                  <div className="flex items-center gap-2 mb-6">
-                    <Filter className="w-4 h-4 text-teal-400" />
-                    <h3 className="font-semibold text-slate-200">Quick Filters</h3>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                        Roles
-                      </h4>
-                      <div className="space-y-3">
-                        {['Engineering', 'Design', 'Product', 'Marketing'].map(role => (
-                          <label key={role} className="flex items-center gap-3 cursor-pointer group">
-                            <div className="w-4 h-4 rounded border border-slate-600 bg-slate-800 group-hover:border-teal-500 transition-colors flex items-center justify-center" />
-                            <span className="text-sm text-slate-400 group-hover:text-slate-200 transition-colors">
-                              {role}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                        Commitment
-                      </h4>
-                      <div className="space-y-3">
-                        {['Full-time', 'Part-time', 'Weekends'].map(time => (
-                          <label key={time} className="flex items-center gap-3 cursor-pointer group">
-                            <div className="w-4 h-4 rounded border border-slate-600 bg-slate-800 group-hover:border-teal-500 transition-colors" />
-                            <span className="text-sm text-slate-400 group-hover:text-slate-200 transition-colors">
-                              {time}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Shortcut to re-run matching */}
-                  <div className="mt-8 pt-6 border-t border-slate-800">
-                    <button
-                      onClick={handleFindMatches}
-                      disabled={matchState === 'loading' || !userId}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-400 rounded-xl text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {matchState === 'loading' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
-                      )}
-                      Find My Matches
-                    </button>
-                  </div>
-                </div>
-              </aside>
-
             </div>
           </div>
         </div>

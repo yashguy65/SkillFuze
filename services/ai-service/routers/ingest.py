@@ -41,8 +41,8 @@ async def ingest_github_data(request: GitHubIngestRequest):
         })
         
     try:
-        # Delete old chunks for this user to avoid duplicates on re-ingest
-        supabase.table("github_chunks").delete().eq("user_id", request.user_id).execute()
+        # Delete old chunks for this user to avoid duplicates on re-ingest (excluding custom_tags)
+        supabase.table("github_chunks").delete().eq("user_id", request.user_id).neq("repo_name", "custom_tags").execute()
         # Insert new chunks
         res = supabase.table("github_chunks").insert(rows).execute()
         chunks_stored = len(rows)  # res.data might be empty depending on Supabase version

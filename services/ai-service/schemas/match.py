@@ -5,6 +5,7 @@ class MatchRequest(BaseModel):
     user_id: str
     top_k: Optional[int] = 5
     custom_tags: Optional[List[str]] = None
+    search_query: Optional[str] = None
 
 class MatchResult(BaseModel):
     user_id: str

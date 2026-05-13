@@ -57,7 +57,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.label}
                 href={item.href}
-                className={`p-3 rounded-xl transition-all group relative ${isActive ? 'bg-teal-500/10 text-teal-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                className={`p-3 rounded-xl transition-all group relative ${isActive ? 'bg-blue-500/10 text-blue-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                 title={item.label}
               >
                 <item.icon className="w-6 h-6" />
