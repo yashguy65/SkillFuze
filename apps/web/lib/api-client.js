@@ -1,9 +1,17 @@
 export async function checkBackendHealth() {
     try {
-        const springBootUrl = process.env.NEXT_PUBLIC_API_URL || 
-            (process.env.NODE_ENV === 'production' ? 'https://skillfuze.onrender.com' : 'http://localhost:8080');
-        const aiServiceUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 
-            (process.env.NODE_ENV === 'production' ? 'https://skillfuze-ai-service.onrender.com' : 'http://localhost:8000');
+        let springBootUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        let aiServiceUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000';
+        
+        // Foolproof fallback: if in production, never use localhost even if env vars are misconfigured
+        if (process.env.NODE_ENV === 'production') {
+            if (!springBootUrl || springBootUrl.includes('localhost')) {
+                springBootUrl = 'https://skillfuze.onrender.com';
+            }
+            if (!aiServiceUrl || aiServiceUrl.includes('localhost')) {
+                aiServiceUrl = 'https://skillfuze-ai-service.onrender.com';
+            }
+        }
         
         const [springResponse, aiResponse] = await Promise.all([
             fetch(`${springBootUrl}/health`, { next: { revalidate: 60 } }).catch(() => null),
