@@ -1,6 +1,7 @@
 export async function checkBackendHealth() {
     try {
-        const springBootUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        const springBootUrl = process.env.NEXT_PUBLIC_API_URL || 
+            (process.env.NODE_ENV === 'production' ? 'https://skillfuze.onrender.com' : 'http://localhost:8080');
         const aiServiceUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000';
         
         const [springResponse, aiResponse] = await Promise.all([
