@@ -1,18 +1,25 @@
 export async function checkBackendHealth() {
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-        const response = await fetch(`${baseUrl}/health`, {
-            // next.js specific revalidation rules if needed
-            next: { revalidate: 60 }
-        });
-        if (response.ok) {
-            const status = await response.text();
-            console.log('Backend is up!', status); // logs "OK"
+        const springBootUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        const aiServiceUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000';
+        
+        const [springResponse, aiResponse] = await Promise.all([
+            fetch(`${springBootUrl}/health`, { next: { revalidate: 60 } }).catch(() => null),
+            fetch(`${aiServiceUrl}/health`, { next: { revalidate: 60 } }).catch(() => null)
+        ]);
+
+        const isSpringUp = !!(springResponse && springResponse.ok);
+        const isAiUp = !!(aiResponse && aiResponse.ok);
+
+        if (isSpringUp && isAiUp) {
+            console.log('Both SpringBoot and AI services are up!');
             return true;
+        } else {
+            console.warn('One or more backend services are down. SpringBoot:', isSpringUp, 'AI Service:', isAiUp);
+            return false;
         }
-        return false;
     } catch (error) {
-        console.error('Failed to reach backend:', error);
+        console.error('Failed to reach backend services:', error);
         return false;
     }
 }
