@@ -28,6 +28,27 @@ export async function syncGitHub(payload: IngestRequest): Promise<IngestResponse
   return res.json() as Promise<IngestResponse>
 }
 
+// ── LinkedIn Ingest ───────────────────────────────────────────────────────────
+
+export async function syncLinkedIn(userId: string, file: File): Promise<IngestResponse> {
+  const formData = new FormData()
+  formData.append('user_id', userId)
+  formData.append('file', file)
+
+  const res = await fetch('/api/ai/linkedin', {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? 'Failed to sync LinkedIn data')
+  }
+
+  return res.json() as Promise<IngestResponse>
+}
+
+
 // ── Tags Ingest ───────────────────────────────────────────────────────────────
 
 export interface TagsIngestRequest {

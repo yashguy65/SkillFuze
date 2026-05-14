@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { syncGitHub, getPersona, ingestTags } from '@/lib/ai-service'
-import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink, Plus, X } from 'lucide-react'
+import { syncGitHub, getPersona, ingestTags, syncLinkedIn } from '@/lib/ai-service'
+import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink, Plus, X, FileUp } from 'lucide-react'
 
 type SyncStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -15,6 +16,12 @@ export default function ProfilePage() {
   } | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [syncMessage, setSyncMessage] = useState('')
+  
+  // LinkedIn Sync State
+  const [linkedinSyncStatus, setLinkedinSyncStatus] = useState<SyncStatus>('idle')
+  const [linkedinSyncMessage, setLinkedinSyncMessage] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [skills, setSkills] = useState<string[]>([])
 
   // Custom Tags State
@@ -98,6 +105,51 @@ export default function ProfilePage() {
     } finally {
       // Reset after 6 s so the button is usable again
       setTimeout(() => setSyncStatus('idle'), 6000)
+    }
+  }
+
+  const handleSyncLinkedIn = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 5MB limit
+    if (file.size > 5 * 1024 * 1024) {
+      setLinkedinSyncStatus('error')
+      setLinkedinSyncMessage('File size exceeds 5MB limit.')
+      return
+    }
+
+    if (file.type !== 'application/pdf') {
+      setLinkedinSyncStatus('error')
+      setLinkedinSyncMessage('Please upload a valid PDF file.')
+      return
+    }
+
+    setLinkedinSyncStatus('loading')
+    setLinkedinSyncMessage('')
+
+    try {
+      const result = await syncLinkedIn(user.id, file)
+
+      // Refresh persona to get updated skills from LinkedIn
+      const persona = await getPersona({ user_id: user.id }).catch(() => null)
+      if (persona) setSkills(persona.skills)
+
+      setLinkedinSyncStatus('success')
+      setLinkedinSyncMessage(
+        result.chunks_stored === 0
+          ? 'Sync complete — no data extracted.'
+          : `Sync complete! LinkedIn profile indexed.`
+      )
+    } catch (err: unknown) {
+      setLinkedinSyncStatus('error')
+      setLinkedinSyncMessage(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      setTimeout(() => setLinkedinSyncStatus('idle'), 6000)
     }
   }
 
@@ -225,7 +277,6 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* GitHub link */}
         {githubUsername && (
           <a
             href={`https://github.com/${githubUsername}`}
@@ -239,49 +290,113 @@ export default function ProfilePage() {
           </a>
         )}
 
-        {/* ── Sync GitHub ───────────────────────────────────────────────── */}
-        <div className="w-full mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              GitHub Sync
-            </h2>
-            {syncStatus === 'success' && (
-              <span className="text-xs text-blue-400 font-medium">
-                ✓ Up to date
-              </span>
-            )}
-          </div>
+        {/* ── Sync Source ───────────────────────────────────────────────── */}
+        {githubUsername ? (
+          <div className="w-full mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+                GitHub Sync
+              </h2>
+              {syncStatus === 'success' && (
+                <span className="text-xs text-blue-400 font-medium">
+                  ✓ Up to date
+                </span>
+              )}
+            </div>
 
-          <button
-            id="sync-github-btn"
-            onClick={handleSyncGitHub}
-            disabled={syncStatus === 'loading'}
-            className={`
-              w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
-              text-sm font-semibold transition-all duration-300
-              ${syncButtonClass}
-              disabled:cursor-not-allowed
-            `}
-          >
-            {syncButtonContent()}
-          </button>
-
-          {/* Status message */}
-          {syncMessage && (
-            <p
-              className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${syncMessage.includes('complete') || syncStatus === 'success'
-                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                }`}
+            <button
+              id="sync-github-btn"
+              onClick={handleSyncGitHub}
+              disabled={syncStatus === 'loading'}
+              className={`
+                w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
+                text-sm font-semibold transition-all duration-300
+                ${syncButtonClass}
+                disabled:cursor-not-allowed
+              `}
             >
-              {syncMessage}
-            </p>
-          )}
+              {syncButtonContent()}
+            </button>
 
-          <p className="mt-2 text-xs text-slate-600 text-center">
-            Indexes your public repos &amp; activity for AI matching
-          </p>
-        </div>
+            {/* Status message */}
+            {syncMessage && (
+              <p
+                className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${syncMessage.includes('complete') || syncStatus === 'success'
+                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}
+              >
+                {syncMessage}
+              </p>
+            )}
+
+            <p className="mt-2 text-xs text-slate-600 text-center">
+              Indexes your public repos &amp; activity for AI matching
+            </p>
+          </div>
+        ) : (
+          <div className="w-full mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+                LinkedIn Sync
+              </h2>
+              {linkedinSyncStatus === 'success' && (
+                <span className="text-xs text-blue-400 font-medium">
+                  ✓ Up to date
+                </span>
+              )}
+            </div>
+
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleSyncLinkedIn}
+            />
+
+            <button
+              id="sync-linkedin-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={linkedinSyncStatus === 'loading'}
+              className={`
+                w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
+                text-sm font-semibold transition-all duration-300
+                ${linkedinSyncStatus === 'idle' ? 'bg-slate-800 hover:bg-blue-500/10 text-slate-200 hover:text-blue-300 border border-slate-700 hover:border-blue-500/40' : ''}
+                ${linkedinSyncStatus === 'loading' ? 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed' : ''}
+                ${linkedinSyncStatus === 'success' ? 'bg-blue-500/10 text-blue-300 border border-blue-500/40' : ''}
+                ${linkedinSyncStatus === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20' : ''}
+                disabled:cursor-not-allowed
+              `}
+            >
+              {linkedinSyncStatus === 'loading' ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Syncing…</>
+              ) : linkedinSyncStatus === 'success' ? (
+                <><CheckCircle2 className="w-4 h-4" /> Synced!</>
+              ) : linkedinSyncStatus === 'error' ? (
+                <><AlertCircle className="w-4 h-4" /> Retry Upload</>
+              ) : (
+                <><FileUp className="w-4 h-4" /> Upload Profile PDF</>
+              )}
+            </button>
+
+            {/* Status message */}
+            {linkedinSyncMessage && (
+              <p
+                className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${linkedinSyncMessage.includes('complete') || linkedinSyncStatus === 'success'
+                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}
+              >
+                {linkedinSyncMessage}
+              </p>
+            )}
+
+            <p className="mt-2 text-xs text-slate-600 text-center">
+              Go to <a href="https://www.linkedin.com/in/me/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">your LinkedIn profile</a>, click <strong>More</strong> → <strong>Save to PDF</strong>, then upload it here.
+            </p>
+          </div>
+        )}
 
         {/* ── Collaboration Preference ───────────────────────────────────── */}
         <div className="w-full mb-8">
