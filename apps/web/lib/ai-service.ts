@@ -11,6 +11,7 @@ export interface IngestRequest {
 
 export interface IngestResponse {
   chunks_stored: number
+  extracted_tags?: string[]
 }
 
 export async function syncGitHub(payload: IngestRequest): Promise<IngestResponse> {

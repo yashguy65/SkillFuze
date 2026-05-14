@@ -17,12 +17,12 @@ async def ingest_linkedin_data(
     try:
         pdf_bytes = await file.read()
         parser = LinkedInParser()
-        documents = parser.parse_pdf(pdf_bytes, user_id)
+        documents, extracted_skills = parser.parse_pdf(pdf_bytes, user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
         
     if not documents:
-        return IngestResponse(chunks_stored=0)
+        return IngestResponse(chunks_stored=0, extracted_tags=[])
 
     # Embed documents
     embedder = get_embedder()
@@ -54,4 +54,4 @@ async def ingest_linkedin_data(
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
-    return IngestResponse(chunks_stored=chunks_stored)
+    return IngestResponse(chunks_stored=chunks_stored, extracted_tags=extracted_skills)

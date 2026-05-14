@@ -134,6 +134,26 @@ export default function ProfilePage() {
       // Refresh persona to get updated skills from LinkedIn
       const persona = await getPersona({ user_id: user.id }).catch(() => null)
       if (persona) setSkills(persona.skills)
+      
+      // Auto-add extracted tags to custom tags
+      if (result.extracted_tags && result.extracted_tags.length > 0) {
+        const newTags = result.extracted_tags.filter(tag => !customTags.includes(tag))
+        if (newTags.length > 0) {
+          const updatedTags = [...customTags, ...newTags]
+          const supabase = createClient()
+          const { error } = await supabase.auth.updateUser({
+            data: { custom_tags: updatedTags }
+          })
+          if (!error) {
+            setCustomTags(updatedTags)
+            try {
+              await ingestTags({ user_id: user.id, tags: updatedTags })
+            } catch (err) {
+              console.error('Failed to sync tags to AI service', err)
+            }
+          }
+        }
+      }
 
       setLinkedinSyncStatus('success')
       setLinkedinSyncMessage(
