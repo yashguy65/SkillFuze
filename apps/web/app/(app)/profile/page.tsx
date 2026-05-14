@@ -141,7 +141,7 @@ export default function ProfilePage() {
       
       // Auto-add extracted tags to custom tags
       if (result.extracted_tags && result.extracted_tags.length > 0) {
-        const newTags = result.extracted_tags.filter(tag => !customTags.includes(tag))
+        const newTags = result.extracted_tags.filter(tag => !customTags.some(ct => ct.toLowerCase() === tag.toLowerCase()))
         if (newTags.length > 0) {
           const updatedTags = [...customTags, ...newTags]
           const supabase = createClient()
@@ -181,20 +181,28 @@ export default function ProfilePage() {
     if (!newTagVal.trim() || !user) return
 
     const tag = newTagVal.trim()
+    const tagLower = tag.toLowerCase()
+
+    // If exact same casing exists, do nothing
     if (customTags.includes(tag)) {
       setNewTagVal('')
       setIsAddingTag(false)
       return
     }
 
-    const updatedTags = [...customTags, tag]
+    // Filter out any existing case-variants and unhide if it was hidden
+    const filteredCustomTags = customTags.filter(t => t.toLowerCase() !== tagLower)
+    const updatedHiddenTags = hiddenTags.filter(t => t.toLowerCase() !== tagLower)
+    const updatedTags = [...filteredCustomTags, tag]
+
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({
-      data: { custom_tags: updatedTags }
+      data: { custom_tags: updatedTags, hidden_tags: updatedHiddenTags }
     })
 
     if (!error) {
       setCustomTags(updatedTags)
+      setHiddenTags(updatedHiddenTags)
       setNewTagVal('')
       setIsAddingTag(false)
 
@@ -210,18 +218,23 @@ export default function ProfilePage() {
   const handleRemoveTag = async (tagToRemove: string) => {
     if (!user) return
 
-    let updatedCustomTags = [...customTags]
+    const tagToRemoveLower = tagToRemove.toLowerCase()
+    
+    // Remove from customTags regardless of casing
+    const updatedCustomTags = customTags.filter(tag => tag.toLowerCase() !== tagToRemoveLower)
+    const isCustomTag = updatedCustomTags.length !== customTags.length
+    
     let updatedHiddenTags = [...hiddenTags]
-    let isCustomTag = false
-
-    if (customTags.includes(tagToRemove)) {
-      updatedCustomTags = customTags.filter(tag => tag !== tagToRemove)
-      isCustomTag = true
-    } else if (skills.includes(tagToRemove)) {
-      if (!hiddenTags.includes(tagToRemove)) {
-        updatedHiddenTags = [...hiddenTags, tagToRemove]
+    const hasSkill = skills.some(tag => tag.toLowerCase() === tagToRemoveLower)
+    
+    if (hasSkill) {
+      const skillToRemove = skills.find(tag => tag.toLowerCase() === tagToRemoveLower)
+      if (skillToRemove && !hiddenTags.includes(skillToRemove)) {
+        updatedHiddenTags = [...hiddenTags, skillToRemove]
       }
-    } else {
+    }
+
+    if (!isCustomTag && !hasSkill) {
       return // Should not happen
     }
 
@@ -504,9 +517,16 @@ export default function ProfilePage() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {[...new Set([...customTags, ...skills])]
-              .filter(tag => !hiddenTags.includes(tag))
-              .map(tag => (
+            {(() => {
+              const uniqueTagsMap = new Map<string, string>()
+              // Add skills first
+              skills.forEach(tag => uniqueTagsMap.set(tag.toLowerCase(), tag))
+              // Custom tags override skills (so 'Python' overrides 'python')
+              customTags.forEach(tag => uniqueTagsMap.set(tag.toLowerCase(), tag))
+              
+              return Array.from(uniqueTagsMap.values())
+                .filter(tag => !hiddenTags.some(ht => ht.toLowerCase() === tag.toLowerCase()))
+                .map(tag => (
                 <span
                   key={`tag-${tag}`}
                   className="group relative px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center"
@@ -520,7 +540,8 @@ export default function ProfilePage() {
                     <X className="w-2.5 h-2.5" />
                   </button>
                 </span>
-              ))}
+              ))
+            })()}
             {skills.length === 0 && customTags.length === 0 && (
               <span className="text-sm text-slate-500 italic ml-1">
                 Sync GitHub or upload LinkedIn PDF to add tags
