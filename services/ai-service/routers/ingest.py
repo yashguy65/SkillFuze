@@ -40,15 +40,25 @@ async def ingest_github_data(request: GitHubIngestRequest):
             "embedding": emb
         })
         
+    # Collect unique languages across all repo docs to return as tags
+    seen_langs: set = set()
+    extracted_tags: list = []
+    for doc in documents:
+        for lang in doc.metadata.get("languages", []):
+            lang_lower = lang.lower()
+            if lang_lower not in seen_langs:
+                seen_langs.add(lang_lower)
+                extracted_tags.append(lang)
+
     try:
         # Delete old chunks for this user to avoid duplicates on re-ingest (excluding custom_tags)
         supabase.table("github_chunks").delete().eq("user_id", request.user_id).neq("repo_name", "custom_tags").execute()
         # Insert new chunks
         res = supabase.table("github_chunks").insert(rows).execute()
         chunks_stored = len(rows)  # res.data might be empty depending on Supabase version
-        print(f"Successfully inserted {chunks_stored} chunks into Supabase")
+        print(f"Successfully inserted {chunks_stored} chunks into Supabase, tags: {extracted_tags}")
     except Exception as e:
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
-    return IngestResponse(chunks_stored=chunks_stored)
+    return IngestResponse(chunks_stored=chunks_stored, extracted_tags=extracted_tags)

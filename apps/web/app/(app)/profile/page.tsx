@@ -93,6 +93,28 @@ export default function ProfilePage() {
         github_username: githubUsername,
       })
 
+      // Auto-merge extracted language tags into custom tags (same as LinkedIn sync)
+      if (result.extracted_tags && result.extracted_tags.length > 0) {
+        const newTags = result.extracted_tags.filter(
+          tag => !customTags.some(ct => ct.toLowerCase() === tag.toLowerCase())
+        )
+        if (newTags.length > 0) {
+          const updatedTags = [...customTags, ...newTags]
+          const supabase = createClient()
+          const { error } = await supabase.auth.updateUser({
+            data: { custom_tags: updatedTags }
+          })
+          if (!error) {
+            setCustomTags(updatedTags)
+            try {
+              await ingestTags({ user_id: user.id, tags: updatedTags })
+            } catch (err) {
+              console.error('Failed to sync GitHub tags to AI service', err)
+            }
+          }
+        }
+      }
+
       // Refresh persona to get updated languages
       const persona = await getPersona({ user_id: user.id }).catch(() => null)
       if (persona) setSkills(persona.skills)
