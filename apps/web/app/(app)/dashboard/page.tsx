@@ -38,7 +38,7 @@ const PREFERENCES = [
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Card used in the static "Discover" tab */
+/** Card used in the "Discover" tab */
 function DiscoverCard({ user }: { user: DiscoverUser }) {
   return (
     <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
@@ -161,6 +161,7 @@ export default function Dashboard() {
   const [matchError, setMatchError] = useState('')
   const [matchedResults, setMatchedResults] = useState<MatchResult[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(true)
 
@@ -227,7 +228,7 @@ export default function Dashboard() {
           <div className="max-w-6xl mx-auto">
 
             {/* ── AI Search + Find Matches CTA ──────────────────────────── */}
-            <div className="relative mb-8 max-w-2xl mx-auto group mt-4">
+            <div className={`relative mb-8 mx-auto group mt-4 transition-all duration-500 ease-in-out ${isSearchFocused || searchQuery.length > 0 ? 'max-w-4xl' : 'max-w-2xl'}`}>
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
               <div className="relative flex items-center bg-slate-900 border border-slate-700 hover:border-blue-500/50 rounded-full p-2 pl-6 shadow-lg transition-all">
                 <input
@@ -236,6 +237,8 @@ export default function Dashboard() {
                   className="flex-1 bg-transparent border-none outline-none text-slate-200 placeholder:text-slate-500 text-lg"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
                   onKeyDown={(e) => e.key === 'Enter' && handleFindMatches()}
                 />
                 <button
@@ -247,47 +250,12 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* ── Find Matches Hero Button ──────────────────────────────── */}
-            <div className="mb-10 max-w-2xl mx-auto">
-              <button
-                id="find-matches-btn"
-                onClick={handleFindMatches}
-                disabled={matchState === 'loading' || !userId}
-                className="
-                  w-full relative overflow-hidden flex items-center justify-center gap-3
-                  px-6 py-4 rounded-2xl font-semibold text-base
-                  bg-gradient-to-r from-blue-600 to-blue-600
-                  hover:from-blue-500 hover:to-blue-500
-                  disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
-                  text-white shadow-[0_4px_32px_-4px_rgba(59,130,246,0.4)]
-                  hover:shadow-[0_4px_40px_-4px_rgba(59,130,246,0.6)]
-                  transition-all duration-300 group
-                "
-              >
-                {/* Shimmer layer */}
-                <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-
-                {matchState === 'loading' ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Finding your matches…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    Find Matches
-                    <span className="text-white/60 text-sm font-normal">— powered by embeddings</span>
-                  </>
-                )}
-              </button>
-            </div>
-
             {/* ── Tabs ─────────────────────────────────────────────────── */}
             <div className="flex items-center gap-1 mb-6 bg-slate-900/50 p-1 rounded-xl border border-slate-800 self-start w-fit">
               {(['discover', 'matches'] as const).map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => { setActiveTab(tab); if (tab == 'matches' && matchState === 'idle') { handleFindMatches() } }}
                   className={`
                     flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all
                     ${activeTab === tab
@@ -402,9 +370,17 @@ export default function Dashboard() {
 
                     {matchState === 'success' && matchedResults.length > 0 && (
                       <>
-                        <p className="text-xs text-slate-500 mb-4">
-                          {matchedResults.length} collaborators ranked by embedding similarity
-                        </p>
+                        <div className="flex items-center justify-between mb-4">
+                          <p className="text-xs text-slate-500">
+                          </p>
+                          <button
+                            onClick={handleFindMatches}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Refresh Matches
+                          </button>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                           {matchedResults.map((match) => (
                             <MatchCard key={match.user_id} match={match} />
@@ -418,7 +394,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   )
 }
