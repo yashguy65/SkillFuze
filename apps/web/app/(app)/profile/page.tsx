@@ -290,6 +290,14 @@ export default function ProfilePage() {
           </a>
         )}
 
+        <input
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleSyncLinkedIn}
+        />
+
         {/* ── Sync Source ───────────────────────────────────────────────── */}
         {githubUsername ? (
           <div className="w-full mb-8">
@@ -346,14 +354,6 @@ export default function ProfilePage() {
                 </span>
               )}
             </div>
-
-            <input
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleSyncLinkedIn}
-            />
 
             <button
               id="sync-linkedin-btn"
@@ -509,10 +509,27 @@ export default function ProfilePage() {
             <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
             Change Password
           </button>
-          <button className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium">
-            <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
-            Add LinkedIn
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={linkedinSyncStatus === 'loading'}
+            className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium disabled:opacity-50"
+          >
+            {linkedinSyncStatus === 'loading' ? (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+            ) : linkedinSyncStatus === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-blue-400" />
+            ) : linkedinSyncStatus === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-red-400" />
+            ) : (
+              <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
+            )}
+            Add LinkedIn (PDF)
           </button>
+          {githubUsername && linkedinSyncMessage && (
+            <p className={`text-xs ${linkedinSyncStatus === 'error' ? 'text-red-400' : 'text-blue-400'} ml-6`}>
+              {linkedinSyncMessage}
+            </p>
+          )}
           <button
             onClick={handleSyncGitHub}
             disabled={syncStatus === 'loading'}
