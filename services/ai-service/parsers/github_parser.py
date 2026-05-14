@@ -21,6 +21,7 @@ class GitHubParser:
               nodes {
                 name
                 description
+                stargazerCount
                 languages(first: 5, orderBy: {field: SIZE, direction: DESC}) {
                   nodes {
                     name
@@ -92,6 +93,7 @@ class GitHubParser:
                 if not repo: continue
                 repo_name = repo.get("name")
                 desc = repo.get("description")
+                stars = repo.get("stargazerCount", 0)
                 
                 languages = [l.get("name") for l in repo.get("languages", {}).get("nodes", []) if l.get("name")]
                 lang_names = ", ".join(languages) if languages else "None"
@@ -107,6 +109,6 @@ class GitHubParser:
                     pass
 
                 repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguages: {lang_names}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
-                documents.append(Document(page_content=repo_content, metadata={**base_meta, "repo": repo_name, "languages": languages}))
+                documents.append(Document(page_content=repo_content, metadata={**base_meta, "repo": repo_name, "languages": languages, "stars": stars}))
 
             return documents
