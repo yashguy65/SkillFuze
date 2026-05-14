@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [skills, setSkills] = useState<string[]>([])
+  const [hiddenTags, setHiddenTags] = useState<string[]>([])
 
   // Custom Tags State
   const [customTags, setCustomTags] = useState<string[]>([])
@@ -49,6 +50,9 @@ export default function ProfilePage() {
         // Load custom tags and preference from metadata
         if (user.user_metadata?.custom_tags) {
           setCustomTags(user.user_metadata.custom_tags)
+        }
+        if (user.user_metadata?.hidden_tags) {
+          setHiddenTags(user.user_metadata.hidden_tags)
         }
         if (user.user_metadata?.preference) {
           setPreference(user.user_metadata.preference)
@@ -206,21 +210,37 @@ export default function ProfilePage() {
   const handleRemoveTag = async (tagToRemove: string) => {
     if (!user) return
 
-    const updatedTags = customTags.filter(tag => tag !== tagToRemove)
+    let updatedCustomTags = [...customTags]
+    let updatedHiddenTags = [...hiddenTags]
+    let isCustomTag = false
+
+    if (customTags.includes(tagToRemove)) {
+      updatedCustomTags = customTags.filter(tag => tag !== tagToRemove)
+      isCustomTag = true
+    } else if (skills.includes(tagToRemove)) {
+      if (!hiddenTags.includes(tagToRemove)) {
+        updatedHiddenTags = [...hiddenTags, tagToRemove]
+      }
+    } else {
+      return // Should not happen
+    }
+
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({
-      data: { custom_tags: updatedTags }
+      data: { custom_tags: updatedCustomTags, hidden_tags: updatedHiddenTags }
     })
 
     if (!error) {
-      setCustomTags(updatedTags)
-      setSkills(prev => prev.filter(s => s !== tagToRemove))
-
-      // Sync updated tags to embeddings database
-      try {
-        await ingestTags({ user_id: user.id, tags: updatedTags })
-      } catch (err) {
-        console.error('Failed to sync tags to AI service', err)
+      setCustomTags(updatedCustomTags)
+      setHiddenTags(updatedHiddenTags)
+      
+      if (isCustomTag) {
+        // Sync updated tags to embeddings database
+        try {
+          await ingestTags({ user_id: user.id, tags: updatedCustomTags })
+        } catch (err) {
+          console.error('Failed to sync tags to AI service', err)
+        }
       }
     }
   }
@@ -484,39 +504,27 @@ export default function ProfilePage() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {customTags.map(tag => (
-              <span
-                key={`custom-${tag}`}
-                className="group relative px-4 py-1.5 bg-slate-800 text-slate-300 rounded-full text-sm font-medium border border-slate-700 hover:border-white/50 hover:bg-slate-800/80 transition-colors flex items-center"
-              >
-                {tag}
-                <button
-                  onClick={() => handleRemoveTag(tag)}
-                  className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                  aria-label={`Remove ${tag} tag`}
+            {[...new Set([...customTags, ...skills])]
+              .filter(tag => !hiddenTags.includes(tag))
+              .map(tag => (
+                <span
+                  key={`tag-${tag}`}
+                  className="group relative px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center"
                 >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            ))}
-            {skills.length > 0 ? (
-              [...skills]
-                .filter(skill => !customTags.includes(skill))
-                .reverse()
-                .map(skill => (
-                  <span
-                    key={skill}
-                    className="px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20"
+                  {tag}
+                  <button
+                    onClick={() => handleRemoveTag(tag)}
+                    className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                    aria-label={`Remove ${tag} tag`}
                   >
-                    {skill}
-                  </span>
-                ))
-            ) : (
-              customTags.length === 0 && (
-                <span className="text-sm text-slate-500 italic ml-1">
-                  Sync GitHub to view languages
+                    <X className="w-2.5 h-2.5" />
+                  </button>
                 </span>
-              )
+              ))}
+            {skills.length === 0 && customTags.length === 0 && (
+              <span className="text-sm text-slate-500 italic ml-1">
+                Sync GitHub or upload LinkedIn PDF to add tags
+              </span>
             )}
           </div>
         </div>
