@@ -2,3 +2,20 @@ node_modules/
 .env
 **/.env
 .env.*
+
+CLAUDE.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+venv/
+env/
+.venv/

@@ -1,0 +1,62 @@
+# .aiignore — tells AI agents (Claude, Copilot, Cursor, etc.) which files/dirs
+# to skip when scanning the codebase. Read CLAUDE.md first for a full project map.
+
+# ── Node / pnpm ───────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+pnpm-lock.yaml
+package-lock.json
+*.lock
+
+# ── Next.js build output ──────────────────────────────────────────────────────
+apps/web/.next/
+apps/web/next-env.d.ts
+
+# ── Java / Maven build artifacts ──────────────────────────────────────────────
+apps/backend/skillfuze/target/
+apps/backend/skillfuze/.mvn/wrapper/
+apps/backend/skillfuze/mvnw
+apps/backend/skillfuze/mvnw.cmd
+
+# ── Python artifacts ──────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+.venv/
+venv/
+services/ai-service/.venv/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+**/.env
+
+# ── Git internals ─────────────────────────────────────────────────────────────
+.git/
+.github/
+
+# ── IDE / Editor configs ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Public / static assets (large binary blobs) ──────────────────────────────
+apps/web/public/
+apps/web/app/icon.png
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Turbo cache ───────────────────────────────────────────────────────────────
+.turbo/
+
+# ── shadcn-generated UI primitives (boilerplate, rarely need agent attention) ─
+apps/web/components/ui/

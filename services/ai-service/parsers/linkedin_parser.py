@@ -3,7 +3,7 @@ import re
 import pdfplumber
 from typing import List, Tuple
 from langchain_core.documents import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class LinkedInParser:
     def __init__(self):

@@ -24,8 +24,32 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint Web
         run: pnpm --filter web lint
+      - name: TypeScript Type Check
+        run: pnpm --filter web typecheck
       - name: Build Web
         run: pnpm --filter web build
+
+  ai-service-ci:
+    name: AI Service CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install Dependencies
+        working-directory: ./services/ai-service
+        run: |
+          pip install --default-timeout=100 -r requirements.txt
+          pip install pytest
+      - name: Syntax Check
+        working-directory: ./services/ai-service
+        run: python -m py_compile main.py
+      - name: Run Tests
+        working-directory: ./services/ai-service
+        run: python -m pytest tests/ -v --tb=short
 
   backend-ci:
     name: Backend CI
