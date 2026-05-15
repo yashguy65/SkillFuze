@@ -1,0 +1,5 @@
+pydantic==2.6.1
+pytest==9.0.3
+pdfplumber==0.11.0
+langchain-core==0.1.53
+langchain-text-splitters==0.0.2

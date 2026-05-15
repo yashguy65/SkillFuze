@@ -4,6 +4,7 @@ node_modules/
 .env.*
 
 CLAUDE.md
+AGENTS.md
 .aiignore
 # Python
 __pycache__/

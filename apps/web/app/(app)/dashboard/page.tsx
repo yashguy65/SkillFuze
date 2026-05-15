@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { findMatches, MatchResult } from '@/lib/ai-service'
 import Link from 'next/link'
 import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap, Filter, MessageSquare } from 'lucide-react'
+import { useNotifications } from '../notifications-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,7 @@ function MatchCard({ match }: { match: MatchResult }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { totalUnread } = useNotifications()
   const [userId, setUserId] = useState<string | null>(null)
   const [customTags, setCustomTags] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'discover' | 'matches'>('discover')
@@ -181,6 +183,7 @@ export default function Dashboard() {
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(true)
   const [selectedPreferences, setSelectedPreferences] = useState<string[]>([])
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
+  const [isActivityOpen, setIsActivityOpen] = useState(false)
 
   useEffect(() => {
     // Fetch auth
@@ -233,11 +236,67 @@ export default function Dashboard() {
         <header className="flex justify-between items-center px-8 py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10">
           <div className="w-10" />
           <h1 className="text-5xl tracking-tighter text-white">Dashboard</h1>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-white transition-colors relative">
+          <div className="flex items-center gap-4 relative">
+            <button
+              onClick={() => setIsActivityOpen((open) => !open)}
+              className="p-2 text-slate-400 hover:text-white transition-colors relative"
+              title="Activity"
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+              {(totalUnread > 0 || matchState === 'success') && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+              )}
             </button>
+
+            {isActivityOpen && (
+              <div className="absolute right-0 top-10 w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-20">
+                <div className="px-4 py-3 border-b border-slate-800">
+                  <p className="text-sm font-semibold text-slate-100">Activity</p>
+                </div>
+                <div className="p-2 space-y-1">
+                  <Link
+                    href="/messages"
+                    className="flex items-start gap-3 rounded-lg px-3 py-3 hover:bg-slate-800 transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-200">
+                        {totalUnread > 0 ? `${totalUnread} unread message${totalUnread === 1 ? '' : 's'}` : 'No unread messages'}
+                      </span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Chat alerts and browser push notifications live here.
+                      </span>
+                    </span>
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setIsActivityOpen(false)
+                      void handleFindMatches()
+                    }}
+                    className="w-full flex items-start gap-3 rounded-lg px-3 py-3 hover:bg-slate-800 transition-colors text-left"
+                  >
+                    <Sparkles className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-200">
+                        {matchState === 'success' ? `${matchedResults.length} AI matches ready` : 'Find fresh AI matches'}
+                      </span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Uses your GitHub, LinkedIn, and tag signals.
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex items-start gap-3 rounded-lg px-3 py-3">
+                    <Users className="w-4 h-4 mt-0.5 text-slate-500 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-400">Community activity soon</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Shared tags, filters, and collaboration updates will land here.
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 

@@ -1,13 +1,34 @@
-from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import SentenceTransformer
 
-_embedder: HuggingFaceEmbeddings | None = None
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
-def get_embedder() -> HuggingFaceEmbeddings:
+
+class MiniLMEmbeddings:
+    def __init__(self) -> None:
+        self.model = SentenceTransformer(MODEL_NAME, device="cpu")
+
+    def embed_query(self, text: str) -> list[float]:
+        embedding = self.model.encode(
+            text,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+        )
+        return embedding.tolist()
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        embeddings = self.model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+        )
+        return embeddings.tolist()
+
+
+_embedder: MiniLMEmbeddings | None = None
+
+
+def get_embedder() -> MiniLMEmbeddings:
     global _embedder
     if _embedder is None:
-        _embedder = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
-        )
+        _embedder = MiniLMEmbeddings()
     return _embedder
