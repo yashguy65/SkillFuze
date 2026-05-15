@@ -3,7 +3,7 @@
 import { ReactNode, useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Menu, Home, User, Settings, LogOut } from 'lucide-react'
+import { Menu, Home, User, Settings, LogOut, MessageSquare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -39,6 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { icon: Home, label: 'Home', href: '/dashboard' },
     { icon: User, label: 'Profile', href: '/profile' },
+    { icon: MessageSquare, label: 'Chat', href: '/messages' },
     { icon: Settings, label: 'Settings', href: '#' },
   ];
 

@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { findMatches, MatchResult } from '@/lib/ai-service'
-import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap } from 'lucide-react'
+import Link from 'next/link'
+import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap, Filter, MessageSquare } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,13 @@ function DiscoverCard({ user }: { user: DiscoverUser }) {
             @{user.username}
           </h3>
         </div>
+        <Link 
+          href={`/messages?user_id=${user.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="p-2 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors self-start shrink-0"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </Link>
       </div>
       <p className="text-sm text-slate-400 mb-6 line-clamp-2 font-light">{user.bio}</p>
       <div className="flex flex-wrap gap-2">
@@ -125,6 +133,13 @@ function MatchCard({ match }: { match: MatchResult }) {
             </span>
           </p>
         </div>
+        <Link 
+          href={`/messages?user_id=${match.user_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="p-2 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors self-start shrink-0"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </Link>
       </div>
 
       <p className="text-sm text-slate-400 mb-6 line-clamp-2 font-light">
@@ -164,6 +179,8 @@ export default function Dashboard() {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(true)
+  const [selectedPreferences, setSelectedPreferences] = useState<string[]>([])
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false)
 
   useEffect(() => {
     // Fetch auth
@@ -196,7 +213,7 @@ export default function Dashboard() {
     try {
       const { matches } = await findMatches({
         user_id: userId,
-        top_k: 6,
+        top_k: 100,
         custom_tags: customTags.length > 0 ? customTags : undefined,
         search_query: searchQuery.trim() || undefined,
       })
@@ -282,25 +299,77 @@ export default function Dashboard() {
 
                 {/* DISCOVER TAB */}
                 {activeTab === 'discover' && (
-                  <div className="space-y-12 pb-12">
-                    {isLoadingDiscover ? (
-                      <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-                        <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
-                        <p className="font-medium">Loading network...</p>
-                      </div>
-                    ) : discoverUsers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-24 text-slate-500">
-                        <Users className="w-12 h-12 mb-4 opacity-30" />
-                        <p className="text-lg font-medium">No users found</p>
-                        <p className="text-sm mt-1">Check back later when more people join.</p>
-                      </div>
-                    ) : (
-                      PREFERENCES.map(pref => {
-                        const users = discoverUsers.filter(u => u.preference === pref && u.id !== userId)
-                        if (users.length === 0) return null
+                  <div className="pb-12">
+                    {!isLoadingDiscover && discoverUsers.length > 0 && (
+                      <div className="mb-8">
+                        <button
+                          onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                            isFiltersOpen || selectedPreferences.length > 0
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-300'
+                          }`}
+                        >
+                          <Filter className="w-4 h-4" />
+                          Filters {selectedPreferences.length > 0 && `(${selectedPreferences.length})`}
+                        </button>
 
-                        return (
-                          <div key={pref}>
+                        <div className={`grid transition-all duration-300 ease-in-out ${isFiltersOpen ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0'}`}>
+                          <div className="overflow-hidden">
+                            <div className="flex flex-wrap items-center gap-2 p-4 bg-slate-900/50 border border-slate-800 rounded-xl">
+                              <span className="text-sm text-slate-400 font-medium mr-2">Filter by:</span>
+                              {PREFERENCES.map(pref => {
+                                const isSelected = selectedPreferences.includes(pref)
+                                return (
+                                  <button
+                                    key={pref}
+                                    onClick={() => {
+                                      setSelectedPreferences(prev =>
+                                        prev.includes(pref) ? prev.filter(p => p !== pref) : [...prev, pref]
+                                      )
+                                    }}
+                                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                      isSelected
+                                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/50'
+                                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-300'
+                                    }`}
+                                  >
+                                    {pref}
+                                  </button>
+                                )
+                              })}
+                              {selectedPreferences.length > 0 && (
+                                <button 
+                                  onClick={() => setSelectedPreferences([])}
+                                  className="px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors ml-2"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-12">
+                      {isLoadingDiscover ? (
+                        <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+                          <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
+                          <p className="font-medium">Loading network...</p>
+                        </div>
+                      ) : discoverUsers.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-24 text-slate-500">
+                          <Users className="w-12 h-12 mb-4 opacity-30" />
+                          <p className="text-lg font-medium">No users found</p>
+                          <p className="text-sm mt-1">Check back later when more people join.</p>
+                        </div>
+                      ) : (
+                        (selectedPreferences.length > 0 ? selectedPreferences : PREFERENCES).map(pref => {
+                          const users = discoverUsers.filter(u => u.preference === pref && u.id !== userId)
+                          if (users.length === 0) return null
+
+                          return (
+                            <div key={pref}>
                             <h2 className="text-xl font-bold text-slate-200 mb-4 pl-2 border-l-4 border-blue-500">{pref}</h2>
                             <div className="flex overflow-x-auto pb-6 gap-6 snap-x -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
                               {users.map(u => (
@@ -313,6 +382,7 @@ export default function Dashboard() {
                         )
                       })
                     )}
+                    </div>
                   </div>
                 )}
 
@@ -336,7 +406,7 @@ export default function Dashboard() {
                     {matchState === 'loading' && (
                       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
                         <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
-                        <p className="font-medium">Scanning your profile…</p>
+                        <p className="font-medium">Generating Matches…</p>
                         <p className="text-sm mt-1 text-slate-500">Running semantic similarity search</p>
                       </div>
                     )}

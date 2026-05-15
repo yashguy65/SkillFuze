@@ -89,7 +89,7 @@ async def match_users(request: MatchRequest):
             {
                 "query_embedding": query_embedding_list,
                 "match_threshold": 0.0,
-                "match_count": 50,
+                "match_count": max(100, (request.top_k or 5) * 5),
             },
         ).execute()
     except Exception as e:

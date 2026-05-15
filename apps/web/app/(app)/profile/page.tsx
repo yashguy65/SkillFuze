@@ -16,7 +16,7 @@ export default function ProfilePage() {
   } | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [syncMessage, setSyncMessage] = useState('')
-  
+
   // LinkedIn Sync State
   const [linkedinSyncStatus, setLinkedinSyncStatus] = useState<SyncStatus>('idle')
   const [linkedinSyncMessage, setLinkedinSyncMessage] = useState('')
@@ -160,7 +160,7 @@ export default function ProfilePage() {
       // Refresh persona to get updated skills from LinkedIn
       const persona = await getPersona({ user_id: user.id }).catch(() => null)
       if (persona) setSkills(persona.skills)
-      
+
       // Auto-add extracted tags to custom tags
       if (result.extracted_tags && result.extracted_tags.length > 0) {
         const newTags = result.extracted_tags.filter(tag => !customTags.some(ct => ct.toLowerCase() === tag.toLowerCase()))
@@ -241,14 +241,14 @@ export default function ProfilePage() {
     if (!user) return
 
     const tagToRemoveLower = tagToRemove.toLowerCase()
-    
+
     // Remove from customTags regardless of casing
     const updatedCustomTags = customTags.filter(tag => tag.toLowerCase() !== tagToRemoveLower)
     const isCustomTag = updatedCustomTags.length !== customTags.length
-    
+
     let updatedHiddenTags = [...hiddenTags]
     const hasSkill = skills.some(tag => tag.toLowerCase() === tagToRemoveLower)
-    
+
     if (hasSkill) {
       const skillToRemove = skills.find(tag => tag.toLowerCase() === tagToRemoveLower)
       if (skillToRemove && !hiddenTags.includes(skillToRemove)) {
@@ -268,7 +268,7 @@ export default function ProfilePage() {
     if (!error) {
       setCustomTags(updatedCustomTags)
       setHiddenTags(updatedHiddenTags)
-      
+
       if (isCustomTag) {
         // Sync updated tags to embeddings database
         try {
@@ -283,7 +283,7 @@ export default function ProfilePage() {
   const handlePreferenceChange = async (newPref: string) => {
     if (!user || newPref === preference) return
     setIsSavingPref(true)
-    
+
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({
       data: { preference: newPref }
@@ -483,7 +483,7 @@ export default function ProfilePage() {
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
             )}
           </div>
-          
+
           <select
             value={preference}
             onChange={(e) => handlePreferenceChange(e.target.value)}
@@ -545,24 +545,24 @@ export default function ProfilePage() {
               skills.forEach(tag => uniqueTagsMap.set(tag.toLowerCase(), tag))
               // Custom tags override skills (so 'Python' overrides 'python')
               customTags.forEach(tag => uniqueTagsMap.set(tag.toLowerCase(), tag))
-              
+
               return Array.from(uniqueTagsMap.values())
                 .filter(tag => !hiddenTags.some(ht => ht.toLowerCase() === tag.toLowerCase()))
                 .map(tag => (
-                <span
-                  key={`tag-${tag}`}
-                  className="group relative px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center"
-                >
-                  {tag}
-                  <button
-                    onClick={() => handleRemoveTag(tag)}
-                    className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                    aria-label={`Remove ${tag} tag`}
+                  <span
+                    key={`tag-${tag}`}
+                    className="group relative px-4 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-sm font-medium border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center"
                   >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              ))
+                    {tag}
+                    <button
+                      onClick={() => handleRemoveTag(tag)}
+                      className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                      aria-label={`Remove ${tag} tag`}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))
             })()}
             {skills.length === 0 && customTags.length === 0 && (
               <span className="text-sm text-slate-500 italic ml-1">
@@ -576,10 +576,7 @@ export default function ProfilePage() {
 
         {/* Quick Actions */}
         <div className="w-full space-y-3 pt-6 border-t border-slate-800">
-          <button className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium">
-            <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
-            Change Password
-          </button>
+
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={linkedinSyncStatus === 'loading'}
