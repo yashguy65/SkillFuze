@@ -1,12 +1,14 @@
 'use client'
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 type NotifContextType = {
   totalUnread: number
   refreshUnreadCount: () => Promise<void>
   setConversationRead: (otherUserId: string) => Promise<void>
+  setGroupRead: (groupId: string, readAt?: string) => Promise<void>
   pushEnabled: boolean
   pushSupported: boolean
   requestPush: () => Promise<void>
@@ -16,6 +18,7 @@ const NotifContext = createContext<NotifContextType>({
   totalUnread: 0,
   refreshUnreadCount: async () => {},
   setConversationRead: async () => {},
+  setGroupRead: async () => {},
   pushEnabled: false,
   pushSupported: false,
   requestPush: async () => {}
@@ -36,7 +39,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray
 }
 
+function isMissingTableError(error: { code?: string } | null) {
+  return error?.code === '42P01' || error?.code === '42703'
+}
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
   const [totalUnread, setTotalUnread] = useState(0)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushSupported, setPushSupported] = useState(false)
@@ -45,26 +53,70 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
 
+  const ensureCurrentUserId = useCallback(async () => {
+    if (currentUserIdRef.current) return currentUserIdRef.current
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+
+    currentUserIdRef.current = user.id
+    setCurrentUserId(user.id)
+    return user.id
+  }, [supabase])
+
   const refreshUnreadCountForUser = useCallback(async (userId: string) => {
-    const { count, error } = await supabase
+    const { count: directCount, error: directError } = await supabase
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .eq('receiver_id', userId)
       .neq('status', 'read')
 
-    if (error) {
-      console.error('[notifications] unread count failed:', error)
+    if (directError) {
+      console.error('[notifications] direct unread count failed:', directError)
       return
     }
 
-    setTotalUnread(count ?? 0)
+    const { data: memberships, error: membershipError } = await supabase
+      .from('chat_group_members')
+      .select('group_id, last_read_at, joined_at')
+      .eq('user_id', userId)
+
+    if (membershipError) {
+      if (!isMissingTableError(membershipError)) {
+        console.error('[notifications] group membership unread count failed:', membershipError)
+      }
+      setTotalUnread(directCount ?? 0)
+      return
+    }
+
+    let groupUnread = 0
+    for (const membership of memberships || []) {
+      const since = membership.last_read_at || membership.joined_at || new Date(0).toISOString()
+      const { count, error } = await supabase
+        .from('chat_group_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', membership.group_id)
+        .neq('sender_id', userId)
+        .gt('created_at', since)
+
+      if (error) {
+        if (!isMissingTableError(error)) {
+          console.error('[notifications] group unread count failed:', error)
+        }
+        continue
+      }
+
+      groupUnread += count ?? 0
+    }
+
+    setTotalUnread((directCount ?? 0) + groupUnread)
   }, [supabase])
 
   const refreshUnreadCount = useCallback(async () => {
-    const userId = currentUserIdRef.current
+    const userId = await ensureCurrentUserId()
     if (!userId) return
     await refreshUnreadCountForUser(userId)
-  }, [refreshUnreadCountForUser])
+  }, [ensureCurrentUserId, refreshUnreadCountForUser])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -112,6 +164,35 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           },
           () => void refreshUnreadCountForUser(user.id)
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_group_messages',
+          },
+          () => void refreshUnreadCountForUser(user.id)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_group_members',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => void refreshUnreadCountForUser(user.id)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'chat_group_members',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => void refreshUnreadCountForUser(user.id)
+        )
         .subscribe()
 
       channelRef.current = channel
@@ -125,7 +206,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [refreshUnreadCountForUser, supabase])
 
   const setConversationRead = useCallback(async (otherUserId: string) => {
-    const userId = currentUserIdRef.current
+    const userId = await ensureCurrentUserId()
     if (!userId) return
 
     const { error } = await supabase
@@ -141,7 +222,44 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
 
     await refreshUnreadCountForUser(userId)
-  }, [refreshUnreadCountForUser, supabase])
+  }, [ensureCurrentUserId, refreshUnreadCountForUser, supabase])
+
+  const setGroupRead = useCallback(async (groupId: string, readAt?: string) => {
+    const userId = await ensureCurrentUserId()
+    if (!userId) return
+
+    const { error } = await supabase.rpc('mark_chat_group_read', {
+      p_group_id: groupId,
+      p_read_at: readAt || new Date().toISOString()
+    })
+
+    if (error) {
+      if (!isMissingTableError(error)) {
+        console.error('[notifications] mark group read failed:', error)
+      }
+      return
+    }
+
+    await refreshUnreadCountForUser(userId)
+  }, [ensureCurrentUserId, refreshUnreadCountForUser, supabase])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshUnreadCount()
+
+    const handleFocus = () => void refreshUnreadCount()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshUnreadCount()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pathname, refreshUnreadCount])
 
   const requestPush = useCallback(async () => {
     if (!pushSupported || !currentUserId) return
@@ -178,7 +296,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [pushSupported, currentUserId])
 
   return (
-    <NotifContext.Provider value={{ totalUnread, refreshUnreadCount, setConversationRead, pushEnabled, pushSupported, requestPush }}>
+    <NotifContext.Provider value={{ totalUnread, refreshUnreadCount, setConversationRead, setGroupRead, pushEnabled, pushSupported, requestPush }}>
       {children}
     </NotifContext.Provider>
   )
