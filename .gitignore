@@ -19,3 +19,4 @@ htmlcov/
 venv/
 env/
 .venv/
+pyrefly.toml

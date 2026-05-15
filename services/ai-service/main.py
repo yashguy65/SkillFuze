@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pipelines.embedder import get_embedder
-from routers import ingest, persona, match, tags, linkedin
+from routers import ingest, persona, match, tags, linkedin, push
 from dotenv import load_dotenv
 
 # Load root .env file
@@ -38,6 +38,7 @@ app.include_router(persona.router, prefix="/api/v1", tags=["Persona"])
 app.include_router(match.router, prefix="/api/v1", tags=["Match"])
 app.include_router(tags.router, prefix="/api/v1", tags=["Tags"])
 app.include_router(linkedin.router, prefix="/api/v1", tags=["LinkedIn"])
+app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
 
 @app.get("/health")
 def health_check():
