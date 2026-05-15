@@ -60,6 +60,7 @@ drop policy if exists "Group members can read groups" on public.chat_groups;
 create policy "Group members can read groups"
 on public.chat_groups for select
 using (
+  created_by = auth.uid() or
   exists (
     select 1
     from public.chat_group_members members

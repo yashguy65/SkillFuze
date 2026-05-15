@@ -234,13 +234,16 @@ function MessagesContent() {
   }, [setConversationRead])
 
   const markGroupRead = useCallback(async (groupId: string) => {
-    const readAt = new Date().toISOString()
+    let readAt = new Date().toISOString()
 
-    setChats((prev) => prev.map((chat) => (
-      chat.kind === 'group' && chat.groupId === groupId
-        ? { ...chat, unreadCount: 0, lastReadAt: readAt }
-        : chat
-    )))
+    setChats((prev) => prev.map((chat) => {
+      if (chat.kind === 'group' && chat.groupId === groupId) {
+        const lastMsg = chat.messages[chat.messages.length - 1]
+        if (lastMsg) readAt = lastMsg.created_at
+        return { ...chat, unreadCount: 0, lastReadAt: readAt }
+      }
+      return chat
+    }))
 
     await setGroupRead(groupId, readAt)
   }, [setGroupRead])
@@ -682,18 +685,25 @@ function MessagesContent() {
     const defaultName = chosenMembers.map((id) => userName(id, chatProfilesRef.current)).slice(0, 3).join(', ')
     const finalName = groupName.trim() || defaultName || 'New group'
 
-    const { data: groupData, error: groupError } = await supabase.from('chat_groups').insert({
+    const newGroupId = crypto.randomUUID()
+    const { error: groupError } = await supabase.from('chat_groups').insert({
+      id: newGroupId,
       name: finalName,
       created_by: currentUserId
-    }).select().single()
+    })
 
-    if (groupError || !groupData) {
+    if (groupError) {
       console.error('Error creating group:', groupError)
       setIsCreatingGroup(false)
       return
     }
 
-    const group = groupData as DbGroup
+    const group: DbGroup = {
+      id: newGroupId,
+      name: finalName,
+      created_by: currentUserId,
+      created_at: new Date().toISOString()
+    }
     const memberRows = [currentUserId, ...chosenMembers].map((userId) => ({
       group_id: group.id,
       user_id: userId,

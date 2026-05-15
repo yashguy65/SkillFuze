@@ -1,7 +1,7 @@
 import os
 import json
 from fastapi import APIRouter, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pywebpush import webpush, WebPushException
 from pipelines.supabase_client import get_supabase
 
@@ -13,7 +13,7 @@ class WebhookPayload(BaseModel):
     table: str
     record: dict
     old_record: dict = None
-    schema: str
+    schema_: str = Field(alias="schema")
 
 
 @router.post("/push/notify")
