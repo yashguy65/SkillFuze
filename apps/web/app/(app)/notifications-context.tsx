@@ -8,7 +8,7 @@ type NotifContextType = {
   totalUnread: number
   refreshUnreadCount: () => Promise<void>
   setConversationRead: (otherUserId: string) => Promise<void>
-  setGroupRead: (groupId: string, readAt?: string) => Promise<void>
+  setGroupRead: (groupId: string) => Promise<void>
   pushEnabled: boolean
   pushSupported: boolean
   requestPush: () => Promise<void>
@@ -224,13 +224,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     await refreshUnreadCountForUser(userId)
   }, [ensureCurrentUserId, refreshUnreadCountForUser, supabase])
 
-  const setGroupRead = useCallback(async (groupId: string, readAt?: string) => {
+  const setGroupRead = useCallback(async (groupId: string) => {
     const userId = await ensureCurrentUserId()
     if (!userId) return
 
     const { error } = await supabase.rpc('mark_chat_group_read', {
-      p_group_id: groupId,
-      p_read_at: readAt || new Date().toISOString()
+      p_group_id: groupId
     })
 
     if (error) {

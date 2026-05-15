@@ -207,6 +207,11 @@ function MessagesContent() {
   const initialGroupIdRef = useRef(initialGroupId)
   const chatProfilesRef = useRef<Map<string, DiscoverUser>>(new Map())
   const groupIdsRef = useRef<Set<string>>(new Set())
+  const chatsRef = useRef<Chat[]>([])
+
+  useEffect(() => {
+    chatsRef.current = chats
+  }, [chats])
 
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId
@@ -234,18 +239,14 @@ function MessagesContent() {
   }, [setConversationRead])
 
   const markGroupRead = useCallback(async (groupId: string) => {
-    let readAt = new Date().toISOString()
-
-    setChats((prev) => prev.map((chat) => {
-      if (chat.kind === 'group' && chat.groupId === groupId) {
-        const lastMsg = chat.messages[chat.messages.length - 1]
-        if (lastMsg) readAt = lastMsg.created_at
-        return { ...chat, unreadCount: 0, lastReadAt: readAt }
+    setChats((prev) => prev.map((c) => {
+      if (c.kind === 'group' && c.groupId === groupId) {
+        return { ...c, unreadCount: 0, lastReadAt: new Date().toISOString() }
       }
-      return chat
+      return c
     }))
 
-    await setGroupRead(groupId, readAt)
+    await setGroupRead(groupId)
   }, [setGroupRead])
 
   const selectChat = useCallback((chat: Chat, shouldMarkRead = true) => {
@@ -685,27 +686,27 @@ function MessagesContent() {
     const defaultName = chosenMembers.map((id) => userName(id, chatProfilesRef.current)).slice(0, 3).join(', ')
     const finalName = groupName.trim() || defaultName || 'New group'
 
-    const newGroupId = crypto.randomUUID()
-    const { error: groupError } = await supabase.from('chat_groups').insert({
-      id: newGroupId,
+    const { data: groupData, error: groupError } = await supabase.from('chat_groups').insert({
       name: finalName,
       created_by: currentUserId
-    })
+    }).select().single()
 
-    if (groupError) {
+    if (groupError || !groupData) {
       console.error('Error creating group:', groupError)
       setIsCreatingGroup(false)
       return
     }
 
+    const newGroupId = groupData.id
     const group: DbGroup = {
       id: newGroupId,
       name: finalName,
       created_by: currentUserId,
-      created_at: new Date().toISOString()
+      created_at: groupData.created_at
     }
+
     const memberRows = [currentUserId, ...chosenMembers].map((userId) => ({
-      group_id: group.id,
+      group_id: newGroupId,
       user_id: userId,
       role: userId === currentUserId ? 'owner' : 'member',
       last_read_at: userId === currentUserId ? new Date().toISOString() : null
@@ -715,12 +716,14 @@ function MessagesContent() {
 
     if (membersError) {
       console.error('Error adding group members:', membersError)
+      // Attempt cleanup if members fail
+      await supabase.from('chat_groups').delete().eq('id', newGroupId)
       setIsCreatingGroup(false)
       return
     }
 
     const chat = createGroupChat(group, memberRows, memberRows[0], chatProfilesRef.current)
-    groupIdsRef.current = new Set([...groupIdsRef.current, group.id])
+    groupIdsRef.current = new Set([...groupIdsRef.current, newGroupId])
     setChats((prev) => sortChats([chat, ...prev]))
     setSelectedChatId(chat.id)
     setGroupName('')

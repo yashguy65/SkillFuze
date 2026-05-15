@@ -1,4 +1,8 @@
 {
     "java.configuration.updateBuildConfiguration": "interactive",
-    "java.compile.nullAnalysis.mode": "automatic"
+    "java.compile.nullAnalysis.mode": "automatic",
+    "python.defaultInterpreterPath": "d:\\skillfuze\\SkillFuze\\services\\ai-service\\.venv\\Scripts\\python.exe",
+    "python.analysis.indexing": false,
+    "python.analysis.typeCheckingMode": "basic",
+    "python.terminal.activateEnvInSelectedTerminal": true
 }
