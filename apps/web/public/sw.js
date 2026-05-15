@@ -5,8 +5,7 @@ self.addEventListener('install', () => {
 })
 
 self.addEventListener('activate', () => {
-  // @ts-expect-error: claim() exists on clients but is not typed in default SW env
-  self.registration?.active?.postMessage({ type: 'CLAIM_CLIENTS' })
+  self.clients.claim()
 })
 
 self.addEventListener('push', (event) => {
@@ -41,18 +40,24 @@ self.addEventListener('notificationclick', (event) => {
   if (event.action === 'dismiss') return
 
   const targetUrl = event.notification.data?.url || '/messages'
+  const absoluteTargetUrl = new URL(targetUrl, self.location.origin).href
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing tab if open
       for (const client of clientList) {
-        if (client.url.includes('/messages') && 'focus' in client) {
+        if (client.url === absoluteTargetUrl && 'focus' in client) {
           return client.focus()
         }
       }
-      // Or open a new window
+
+      for (const client of clientList) {
+        if (client.url.includes('/messages') && 'navigate' in client && 'focus' in client) {
+          return client.navigate(absoluteTargetUrl).then((focusedClient) => focusedClient?.focus())
+        }
+      }
+
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl)
+        return clients.openWindow(absoluteTargetUrl)
       }
     })
   )

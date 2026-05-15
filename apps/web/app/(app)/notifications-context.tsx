@@ -1,23 +1,21 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 type NotifContextType = {
   totalUnread: number
-  markAllRead: () => void
+  refreshUnreadCount: () => Promise<void>
+  setConversationRead: (otherUserId: string) => Promise<void>
   pushEnabled: boolean
   pushSupported: boolean
   requestPush: () => Promise<void>
 }
 
-// ─── Context ────────────────────────────────────────────────────────────────
-
 const NotifContext = createContext<NotifContextType>({
   totalUnread: 0,
-  markAllRead: () => {},
+  refreshUnreadCount: async () => {},
+  setConversationRead: async () => {},
   pushEnabled: false,
   pushSupported: false,
   requestPush: async () => {}
@@ -26,8 +24,6 @@ const NotifContext = createContext<NotifContextType>({
 export function useNotifications() {
   return useContext(NotifContext)
 }
-
-// ─── Helper: base64url → Uint8Array for VAPID key ───────────────────────────
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -40,40 +36,60 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray
 }
 
-// ─── Provider ───────────────────────────────────────────────────────────────
-
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [totalUnread, setTotalUnread] = useState(0)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushSupported, setPushSupported] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const supabase = useRef(createClient()).current
+  const supabase = useMemo(() => createClient(), [])
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const currentUserIdRef = useRef<string | null>(null)
 
-  // ── Register Service Worker ─────────────────────────────────────────────
+  const refreshUnreadCountForUser = useCallback(async (userId: string) => {
+    const { count, error } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('receiver_id', userId)
+      .neq('status', 'read')
+
+    if (error) {
+      console.error('[notifications] unread count failed:', error)
+      return
+    }
+
+    setTotalUnread(count ?? 0)
+  }, [supabase])
+
+  const refreshUnreadCount = useCallback(async () => {
+    const userId = currentUserIdRef.current
+    if (!userId) return
+    await refreshUnreadCountForUser(userId)
+  }, [refreshUnreadCountForUser])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
-    
+
     if (supported) {
       navigator.serviceWorker.ready.then(async (reg) => {
         const existing = await reg.pushManager.getSubscription()
         setPushEnabled(!!existing)
       }).catch(() => {})
-      
+
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPushSupported(supported)
     }
   }, [])
 
-  // ── Init user & subscribe to realtime for unread count ─────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      setCurrentUserId(user.id)
 
-      // Listen for new incoming messages — increment badge when not on /messages
+      setCurrentUserId(user.id)
+      currentUserIdRef.current = user.id
+      await refreshUnreadCountForUser(user.id)
+
       const channel = supabase
         .channel('global:notifications')
         .on(
@@ -84,31 +100,49 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             table: 'messages',
             filter: `receiver_id=eq.${user.id}`,
           },
-          () => {
-            if (!window.location.pathname.startsWith('/messages')) {
-              setTotalUnread((prev) => prev + 1)
-            }
-          }
+          () => void refreshUnreadCountForUser(user.id)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `receiver_id=eq.${user.id}`,
+          },
+          () => void refreshUnreadCountForUser(user.id)
         )
         .subscribe()
 
       channelRef.current = channel
     }
 
-    init()
+    void init()
 
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshUnreadCountForUser, supabase])
 
-  // ── Mark all read (called when user opens /messages) ────────────────────
-  const markAllRead = useCallback(() => {
-    setTotalUnread(0)
-  }, [])
+  const setConversationRead = useCallback(async (otherUserId: string) => {
+    const userId = currentUserIdRef.current
+    if (!userId) return
 
-  // ── Request push permission + subscribe ─────────────────────────────────
+    const { error } = await supabase
+      .from('messages')
+      .update({ status: 'read' })
+      .eq('receiver_id', userId)
+      .eq('sender_id', otherUserId)
+      .neq('status', 'read')
+
+    if (error) {
+      console.error('[notifications] mark conversation read failed:', error)
+      return
+    }
+
+    await refreshUnreadCountForUser(userId)
+  }, [refreshUnreadCountForUser, supabase])
+
   const requestPush = useCallback(async () => {
     if (!pushSupported || !currentUserId) return
 
@@ -144,7 +178,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [pushSupported, currentUserId])
 
   return (
-    <NotifContext.Provider value={{ totalUnread, markAllRead, pushEnabled, pushSupported, requestPush }}>
+    <NotifContext.Provider value={{ totalUnread, refreshUnreadCount, setConversationRead, pushEnabled, pushSupported, requestPush }}>
       {children}
     </NotifContext.Provider>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
+import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Send, Search, Check, CheckCheck, MessageSquare } from 'lucide-react'
 import Image from 'next/image'
@@ -8,14 +8,15 @@ import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '../notifications-context'
 import { RealtimeChannel } from '@supabase/supabase-js'
 
-// Data Types
+type MessageStatus = 'sent' | 'delivered' | 'read'
+
 type Message = {
   id: string
   senderId: string
   receiverId: string
   text: string
   timestamp: string
-  status: 'sent' | 'delivered' | 'read'
+  status: MessageStatus
   created_at?: string
 }
 
@@ -38,10 +39,60 @@ type DiscoverUser = {
   bio: string
 }
 
+type DbMessage = {
+  id: string
+  sender_id: string
+  receiver_id: string
+  text: string
+  status?: MessageStatus | null
+  created_at: string
+}
+
+function formatMessageTime(createdAt: string) {
+  return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function toMessage(msg: DbMessage, overrideStatus?: MessageStatus): Message {
+  return {
+    id: msg.id,
+    senderId: msg.sender_id,
+    receiverId: msg.receiver_id,
+    text: msg.text,
+    timestamp: formatMessageTime(msg.created_at),
+    status: overrideStatus ?? msg.status ?? 'sent',
+    created_at: msg.created_at
+  }
+}
+
+function countUnread(messages: Message[], myId: string) {
+  return messages.filter((msg) => msg.receiverId === myId && msg.status !== 'read').length
+}
+
+function sortChats(chats: Chat[]) {
+  return [...chats].sort((a, b) => {
+    const aTime = a.messages.length ? new Date(a.messages[a.messages.length - 1].created_at!).getTime() : 0
+    const bTime = b.messages.length ? new Date(b.messages[b.messages.length - 1].created_at!).getTime() : 0
+    return bTime - aTime
+  })
+}
+
+function createChat(userId: string, profile?: DiscoverUser): Chat {
+  const name = profile?.username || `User ${userId.substring(0, 8)}`
+  return {
+    id: `chat_${userId}`,
+    userId,
+    name,
+    avatar: profile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+    unreadCount: 0,
+    online: false,
+    messages: []
+  }
+}
+
 function MessagesContent() {
   const searchParams = useSearchParams()
   const initialUserId = searchParams.get('user_id')
-  const { markAllRead } = useNotifications()
+  const { setConversationRead } = useNotifications()
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [chats, setChats] = useState<Chat[]>([])
@@ -52,28 +103,60 @@ function MessagesContent() {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const chatChannelRef = useRef<RealtimeChannel | null>(null)
   const presenceChannelRef = useRef<RealtimeChannel | null>(null)
+  const currentUserIdRef = useRef<string | null>(null)
+  const selectedChatIdRef = useRef<string | null>(null)
+  const initialUserIdRef = useRef(initialUserId)
+  const chatProfilesRef = useRef<Map<string, DiscoverUser>>(new Map())
 
-  // Mark all as read when entering the page
   useEffect(() => {
-    markAllRead()
-  }, [markAllRead])
+    selectedChatIdRef.current = selectedChatId
+  }, [selectedChatId])
 
-  // Handle marking messages as read in DB
-  const markMessagesAsRead = useCallback(async (otherUserId: string) => {
-    if (!currentUserId) return
-    
-    await supabase
-      .from('messages')
-      .update({ status: 'read' })
-      .eq('receiver_id', currentUserId)
-      .eq('sender_id', otherUserId)
-      .neq('status', 'read')
-  }, [currentUserId, supabase])
+  const markConversationRead = useCallback(async (otherUserId: string) => {
+    const myId = currentUserIdRef.current
+    if (!myId) return
 
-  // 1. Fetch current user and all discover users, then fetch messages
+    setChats((prev) => prev.map((chat) => {
+      if (chat.userId !== otherUserId) return chat
+
+      return {
+        ...chat,
+        unreadCount: 0,
+        messages: chat.messages.map((msg) => (
+          msg.senderId === otherUserId && msg.receiverId === myId
+            ? { ...msg, status: 'read' }
+            : msg
+        ))
+      }
+    }))
+
+    await setConversationRead(otherUserId)
+  }, [setConversationRead])
+
+  const selectChatByUserId = useCallback((userId: string, shouldMarkRead = true) => {
+    const targetChatId = `chat_${userId}`
+    setSelectedChatId(targetChatId)
+
+    setChats((prev) => {
+      const existing = prev.find((chat) => chat.userId === userId)
+      if (existing) return prev
+      return [createChat(userId, chatProfilesRef.current.get(userId)), ...prev]
+    })
+
+    if (shouldMarkRead) {
+      void markConversationRead(userId)
+    }
+  }, [markConversationRead])
+
+  useEffect(() => {
+    if (!initialUserId || isLoading) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    selectChatByUserId(initialUserId)
+  }, [initialUserId, isLoading, selectChatByUserId])
+
   useEffect(() => {
     const initData = async () => {
       try {
@@ -83,24 +166,22 @@ function MessagesContent() {
           window.location.href = '/login'
           return
         }
+
         const myId = user.id
         setCurrentUserId(myId)
+        currentUserIdRef.current = myId
 
         const res = await fetch('/api/users/discover')
         const discoverData = await res.json()
         const users: DiscoverUser[] = discoverData.users || []
+        chatProfilesRef.current = new Map(users.map((discoverUser) => [discoverUser.id, discoverUser]))
 
-        const initialChats: Chat[] = users
-          .filter(u => u.id !== myId)
-          .map(u => ({
-            id: `chat_${u.id}`,
-            userId: u.id,
-            name: u.username,
-            avatar: u.avatar || `https://ui-avatars.com/api/?name=${u.username}&background=random`,
-            unreadCount: 0,
-            online: false,
-            messages: []
-          }))
+        const chatMap = new Map<string, Chat>()
+        users
+          .filter((discoverUser) => discoverUser.id !== myId)
+          .forEach((discoverUser) => {
+            chatMap.set(discoverUser.id, createChat(discoverUser.id, discoverUser))
+          })
 
         const { data: messagesData, error } = await supabase
           .from('messages')
@@ -112,74 +193,44 @@ function MessagesContent() {
           console.error('Error fetching messages:', error)
         }
 
-        const validMessages = messagesData || []
+        const validMessages = (messagesData || []) as DbMessage[]
 
         validMessages.forEach((msg) => {
           const otherUserId = msg.sender_id === myId ? msg.receiver_id : msg.sender_id
-          const chat = initialChats.find(c => c.userId === otherUserId)
-          if (chat) {
-            const date = new Date(msg.created_at)
-            const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            chat.messages.push({
-              id: msg.id,
-              senderId: msg.sender_id,
-              receiverId: msg.receiver_id,
-              text: msg.text,
-              timestamp: timeString,
-              status: msg.status || 'sent',
-              created_at: msg.created_at
-            })
-            chat.lastMessage = msg.text
-            chat.lastMessageTime = timeString
-            if (msg.receiver_id === myId && msg.status !== 'read') {
-              chat.unreadCount += 1
-            }
-          }
+          const chat = chatMap.get(otherUserId) ?? createChat(otherUserId, chatProfilesRef.current.get(otherUserId))
+          const formattedMessage = toMessage(msg)
+
+          chat.messages.push(formattedMessage)
+          chat.lastMessage = msg.text
+          chat.lastMessageTime = formattedMessage.timestamp
+          chat.unreadCount = countUnread(chat.messages, myId)
+          chatMap.set(otherUserId, chat)
         })
 
-        initialChats.sort((a, b) => {
-          const aTime = a.messages.length ? new Date(a.messages[a.messages.length - 1].created_at!).getTime() : 0
-          const bTime = b.messages.length ? new Date(b.messages[b.messages.length - 1].created_at!).getTime() : 0
-          return bTime - aTime
-        })
+        let finalChats = sortChats([...chatMap.values()].filter((chat) => chat.messages.length > 0))
+        const targetUserId = initialUserIdRef.current
+        let targetChat: Chat | undefined
 
-        // Filter out empty chats so the sidebar only shows active conversations
-        const finalChats = initialChats.filter(c => c.messages.length > 0)
+        if (targetUserId) {
+          targetChat = finalChats.find((chat) => chat.userId === targetUserId)
 
-        if (initialUserId) {
-          const targetChatIndex = finalChats.findIndex(c => c.userId === initialUserId)
-          if (targetChatIndex !== -1) {
-            const [targetChat] = finalChats.splice(targetChatIndex, 1)
-            finalChats.unshift(targetChat)
-            setSelectedChatId(targetChat.id)
-            markMessagesAsRead(targetChat.userId)
-          } else {
-            const existingProfile = initialChats.find(c => c.userId === initialUserId)
-            if (existingProfile) {
-              finalChats.unshift(existingProfile)
-              setSelectedChatId(existingProfile.id)
-            } else {
-              const fallbackChat: Chat = {
-                id: `chat_${initialUserId}`,
-                userId: initialUserId,
-                name: `User ${initialUserId.substring(0, 8)}`,
-                avatar: `https://ui-avatars.com/api/?name=${initialUserId.substring(0, 2)}&background=random`,
-                unreadCount: 0,
-                online: false,
-                messages: []
-              }
-              finalChats.unshift(fallbackChat)
-              setSelectedChatId(fallbackChat.id)
-            }
+          if (!targetChat) {
+            targetChat = chatMap.get(targetUserId) ?? createChat(targetUserId, chatProfilesRef.current.get(targetUserId))
           }
+
+          finalChats = [targetChat, ...finalChats.filter((chat) => chat.userId !== targetUserId)]
+          setSelectedChatId(targetChat.id)
         } else if (finalChats.length > 0) {
-          setSelectedChatId(finalChats[0].id)
-          markMessagesAsRead(finalChats[0].userId)
+          targetChat = finalChats[0]
+          setSelectedChatId(targetChat.id)
         }
 
         setChats(finalChats)
 
-        // Presence Tracking
+        if (targetChat) {
+          void markConversationRead(targetChat.userId)
+        }
+
         const presenceChannel = supabase.channel('online-users', {
           config: { presence: { key: myId } }
         })
@@ -187,88 +238,86 @@ function MessagesContent() {
         presenceChannel
           .on('presence', { event: 'sync' }, () => {
             const state = presenceChannel.presenceState()
-            const online = new Set<string>(Object.keys(state))
-            setOnlineUsers(online)
+            setOnlineUsers(new Set<string>(Object.keys(state)))
           })
           .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
               await presenceChannel.track({ online_at: new Date().toISOString() })
             }
           })
-        
+
         presenceChannelRef.current = presenceChannel
 
-        // Real-time messages
         const chatChannel = supabase
           .channel('public:messages')
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-            const newMsg = payload.new
-            if (newMsg.sender_id === myId || newMsg.receiver_id === myId) {
-              const otherUserId = newMsg.sender_id === myId ? newMsg.receiver_id : newMsg.sender_id
-              
-              setChats(prevChats => {
-                const existingChatIndex = prevChats.findIndex(c => c.userId === otherUserId)
-                const updatedChats = [...prevChats]
-                
-                const timeString = new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                const formattedMsg: Message = {
-                  id: newMsg.id,
-                  senderId: newMsg.sender_id,
-                  receiverId: newMsg.receiver_id,
-                  text: newMsg.text,
-                  timestamp: timeString,
-                  status: newMsg.status || 'delivered',
-                  created_at: newMsg.created_at
-                }
+            const newMsg = payload.new as DbMessage
+            if (newMsg.sender_id !== myId && newMsg.receiver_id !== myId) return
 
-                if (existingChatIndex !== -1) {
-                  const chat = updatedChats[existingChatIndex]
-                  if (chat.messages.some(m => m.id === newMsg.id)) return prevChats
+            const otherUserId = newMsg.sender_id === myId ? newMsg.receiver_id : newMsg.sender_id
+            const isIncomingOpen = newMsg.receiver_id === myId && selectedChatIdRef.current === `chat_${otherUserId}`
+            const formattedMessage = toMessage(newMsg, isIncomingOpen ? 'read' : undefined)
 
-                  const isCurrentlySelected = `chat_${otherUserId}` === selectedChatId
-                  const newUnreadCount = (!isCurrentlySelected && newMsg.receiver_id === myId) ? chat.unreadCount + 1 : chat.unreadCount
-                  
-                  if (isCurrentlySelected && newMsg.receiver_id === myId) {
-                    markMessagesAsRead(otherUserId)
-                  }
+            setChats((prevChats) => {
+              const existingChat = prevChats.find((chat) => chat.userId === otherUserId)
+              const baseChat = existingChat ?? createChat(otherUserId, chatProfilesRef.current.get(otherUserId))
 
-                  updatedChats[existingChatIndex] = {
-                    ...chat,
-                    messages: [...chat.messages, formattedMsg],
-                    lastMessage: newMsg.text,
-                    lastMessageTime: timeString,
-                    unreadCount: newUnreadCount
-                  }
-                } else {
-                  // If chat doesn't exist in sidebar yet, we might need to add it
-                  // But usually discover users are already mapped.
-                }
+              if (baseChat.messages.some((msg) => msg.id === newMsg.id)) {
+                return prevChats
+              }
 
-                return updatedChats.sort((a, b) => {
-                  const aTime = a.messages.length ? new Date(a.messages[a.messages.length - 1].created_at!).getTime() : 0
-                  const bTime = b.messages.length ? new Date(b.messages[b.messages.length - 1].created_at!).getTime() : 0
-                  return bTime - aTime
-                })
-              })
+              const messages = [...baseChat.messages, formattedMessage]
+              const updatedChat: Chat = {
+                ...baseChat,
+                messages,
+                lastMessage: newMsg.text,
+                lastMessageTime: formattedMessage.timestamp,
+                unreadCount: countUnread(messages, myId)
+              }
+
+              const withoutUpdated = prevChats.filter((chat) => chat.userId !== otherUserId)
+              return sortChats([updatedChat, ...withoutUpdated])
+            })
+
+            if (isIncomingOpen) {
+              void markConversationRead(otherUserId)
             }
           })
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-             // Handle read receipt updates
-             const updatedMsg = payload.new
-             setChats(prev => prev.map(chat => {
-               if (chat.userId === updatedMsg.sender_id || chat.userId === updatedMsg.receiver_id) {
-                 return {
-                   ...chat,
-                   messages: chat.messages.map(m => m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m)
-                 }
-               }
-               return chat
-             }))
+            const updatedMsg = payload.new as DbMessage
+            if (updatedMsg.sender_id !== myId && updatedMsg.receiver_id !== myId) return
+
+            const otherUserId = updatedMsg.sender_id === myId ? updatedMsg.receiver_id : updatedMsg.sender_id
+
+            setChats((prevChats) => prevChats.map((chat) => {
+              if (chat.userId !== otherUserId) return chat
+
+              const messages = chat.messages.map((msg) => (
+                msg.id === updatedMsg.id
+                  ? {
+                      ...msg,
+                      text: updatedMsg.text,
+                      status: updatedMsg.status ?? msg.status,
+                      created_at: updatedMsg.created_at,
+                      timestamp: formatMessageTime(updatedMsg.created_at)
+                    }
+                  : msg
+              ))
+
+              const lastMessage = messages[messages.length - 1]
+
+              return {
+                ...chat,
+                messages,
+                lastMessage: lastMessage?.text,
+                lastMessageTime: lastMessage?.timestamp,
+                unreadCount: countUnread(messages, myId)
+              }
+            }))
           })
           .subscribe()
 
         chatChannelRef.current = chatChannel
-
       } catch (err) {
         console.error('Failed to init messages', err)
       } finally {
@@ -276,61 +325,53 @@ function MessagesContent() {
       }
     }
 
-    initData()
+    void initData()
 
     return () => {
       if (chatChannelRef.current) supabase.removeChannel(chatChannelRef.current)
       if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialUserId, markMessagesAsRead, selectedChatId])
+  }, [markConversationRead, supabase])
 
-  // Update selected chat and mark as read
   const handleChatSelect = (chat: Chat) => {
     setSelectedChatId(chat.id)
-    if (chat.unreadCount > 0) {
-      markMessagesAsRead(chat.userId)
-      setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c))
-    }
+    void markConversationRead(chat.userId)
   }
 
-  // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selectedChatId, chats])
 
-  const selectedChat = chats.find(c => c.id === selectedChatId)
+  const selectedChat = chats.find((chat) => chat.id === selectedChatId)
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     if (!newMessage.trim() || !selectedChat || !currentUserId) return
 
     const tempId = `temp_${Date.now()}`
-    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const createdAt = new Date().toISOString()
+    const timeString = formatMessageTime(createdAt)
     const msgText = newMessage.trim()
 
     setNewMessage('')
-    setChats(prevChats =>
-      prevChats.map(chat => {
-        if (chat.id === selectedChat.id) {
-          return {
-            ...chat,
-            messages: [...chat.messages, {
-              id: tempId,
-              senderId: currentUserId,
-              receiverId: chat.userId,
-              text: msgText,
-              timestamp: timeString,
-              status: 'sent',
-              created_at: new Date().toISOString()
-            }],
-            lastMessage: msgText,
-            lastMessageTime: timeString
-          }
-        }
-        return chat
-      })
-    )
+    setChats((prevChats) => sortChats(prevChats.map((chat) => {
+      if (chat.id !== selectedChat.id) return chat
+
+      return {
+        ...chat,
+        messages: [...chat.messages, {
+          id: tempId,
+          senderId: currentUserId,
+          receiverId: chat.userId,
+          text: msgText,
+          timestamp: timeString,
+          status: 'sent',
+          created_at: createdAt
+        }],
+        lastMessage: msgText,
+        lastMessageTime: timeString
+      }
+    })))
 
     const { data, error } = await supabase.from('messages').insert({
       sender_id: currentUserId,
@@ -341,22 +382,29 @@ function MessagesContent() {
 
     if (error) {
       console.error('Error sending message:', error)
-    } else if (data) {
-      setChats(prevChats =>
-        prevChats.map(chat => {
-          if (chat.id === selectedChat.id) {
-            return {
-              ...chat,
-              messages: chat.messages.map(m => m.id === tempId ? { ...m, id: data.id } : m)
-            }
-          }
-          return chat
-        })
-      )
+      return
+    }
+
+    if (data) {
+      const inserted = data as DbMessage
+      setChats((prevChats) => prevChats.map((chat) => {
+        if (chat.id !== selectedChat.id) return chat
+
+        const messages = chat.messages.map((msg) => (
+          msg.id === tempId ? { ...toMessage(inserted), status: msg.status } : msg
+        ))
+
+        return {
+          ...chat,
+          messages,
+          lastMessage: inserted.text,
+          lastMessageTime: formatMessageTime(inserted.created_at)
+        }
+      }))
     }
   }
 
-  const filteredChats = chats.filter(chat =>
+  const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -370,8 +418,6 @@ function MessagesContent() {
 
   return (
     <div className="flex h-full bg-slate-950 text-slate-200 overflow-hidden shadow-2xl">
-
-      {/* ── Left Sidebar (Chats) ── */}
       <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50">
         <div className="p-4 border-b border-slate-800">
           <h2 className="text-xl font-bold text-white mb-4">Chat</h2>
@@ -388,14 +434,13 @@ function MessagesContent() {
         </div>
 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-          {filteredChats.map(chat => {
+          {filteredChats.map((chat) => {
             const isOnline = onlineUsers.has(chat.userId)
             return (
               <div
                 key={chat.id}
                 onClick={() => handleChatSelect(chat)}
-                className={`flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-2 ${selectedChatId === chat.id ? 'bg-blue-500/10 border-blue-500' : 'border-transparent hover:bg-slate-800/50'
-                  }`}
+                className={`flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-2 ${selectedChatId === chat.id ? 'bg-blue-500/10 border-blue-500' : 'border-transparent hover:bg-slate-800/50'}`}
               >
                 <div className="relative">
                   <Image src={chat.avatar} alt={chat.name} width={48} height={48} className="w-12 h-12 rounded-full object-cover border border-slate-700" unoptimized />
@@ -425,7 +470,6 @@ function MessagesContent() {
         </div>
       </div>
 
-      {/* ── Right Content (Active Chat) ── */}
       {selectedChat ? (
         <div className="flex-1 flex flex-col bg-slate-950 relative">
           <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm z-10">
@@ -485,7 +529,7 @@ function MessagesContent() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    handleSendMessage(e)
+                    void handleSendMessage(e)
                   }
                 }}
                 placeholder="Type a message..."
