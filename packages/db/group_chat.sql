@@ -141,6 +141,26 @@ $$;
 
 grant execute on function public.mark_chat_group_read(uuid, timestamptz) to authenticated;
 
+create or replace function public.mark_direct_messages_read(
+  p_sender_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.messages
+    set status = 'read'
+    where receiver_id = auth.uid()
+      and sender_id = p_sender_id
+      and (status != 'read' or status is null);
+end;
+$$;
+
+grant execute on function public.mark_direct_messages_read(uuid) to authenticated;
+
+
 drop policy if exists "Group members can read messages" on public.chat_group_messages;
 create policy "Group members can read messages"
 on public.chat_group_messages for select

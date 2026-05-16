@@ -59,22 +59,29 @@ echo    Types OK.
 echo.
 echo [5/8] Python AI Service — Syntax + Import Check...
 
-:: Check if Python is available
-py --version >nul 2>&1
-if !ERRORLEVEL! neq 0 (
-    echo    SKIP: Python not found. Install Python 3.11+ to enable AI service checks.
-    goto :step7
+:: Check for local venv
+set PY_CMD=py
+if exist "services\ai-service\.venv\Scripts\python.exe" (
+    set PY_CMD="services\ai-service\.venv\Scripts\python.exe"
+    echo    Using local virtual environment.
+) else (
+    :: Check if Python is available globally
+    py --version >nul 2>&1
+    if !ERRORLEVEL! neq 0 (
+        echo    SKIP: Python not found. Install Python 3.11+ to enable AI service checks.
+        goto :step7
+    )
 )
 
 :: Validate all Python source files compile (catches syntax errors)
-py -m py_compile services\ai-service\main.py
+%PY_CMD% -m py_compile services\ai-service\main.py
 if !ERRORLEVEL! neq 0 (
     echo    ERROR: main.py has syntax errors.
     goto :error
 )
 
 for %%F in (services\ai-service\routers\*.py) do (
-    py -m py_compile "%%F"
+    %PY_CMD% -m py_compile "%%F"
     if !ERRORLEVEL! neq 0 (
         echo    ERROR: %%F has syntax errors.
         goto :error
@@ -82,7 +89,7 @@ for %%F in (services\ai-service\routers\*.py) do (
 )
 
 for %%F in (services\ai-service\parsers\*.py) do (
-    py -m py_compile "%%F"
+    %PY_CMD% -m py_compile "%%F"
     if !ERRORLEVEL! neq 0 (
         echo    ERROR: %%F has syntax errors.
         goto :error
@@ -90,7 +97,7 @@ for %%F in (services\ai-service\parsers\*.py) do (
 )
 
 for %%F in (services\ai-service\pipelines\*.py) do (
-    py -m py_compile "%%F"
+    %PY_CMD% -m py_compile "%%F"
     if !ERRORLEVEL! neq 0 (
         echo    ERROR: %%F has syntax errors.
         goto :error
@@ -98,7 +105,7 @@ for %%F in (services\ai-service\pipelines\*.py) do (
 )
 
 for %%F in (services\ai-service\schemas\*.py) do (
-    py -m py_compile "%%F"
+    %PY_CMD% -m py_compile "%%F"
     if !ERRORLEVEL! neq 0 (
         echo    ERROR: %%F has syntax errors.
         goto :error
@@ -111,13 +118,13 @@ echo    All Python files compile OK.
 echo.
 echo [6/8] Python Unit Tests (pytest)...
 
-py -m pytest --version >nul 2>&1
+%PY_CMD% -m pytest --version >nul 2>&1
 if !ERRORLEVEL! neq 0 (
     echo    SKIP: pytest not installed. Run: pip install pytest
     goto :step7
 )
 
-py -m pytest services\ai-service\tests\ -v --tb=short
+%PY_CMD% -m pytest services\ai-service\tests\ -v --tb=short
 if !ERRORLEVEL! neq 0 goto :error
 echo    Python tests passed.
 

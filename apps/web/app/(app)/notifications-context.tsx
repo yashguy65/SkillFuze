@@ -209,12 +209,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const userId = await ensureCurrentUserId()
     if (!userId) return
 
-    const { error } = await supabase
-      .from('messages')
-      .update({ status: 'read' })
-      .eq('receiver_id', userId)
-      .eq('sender_id', otherUserId)
-      .or('status.neq.read,status.is.null')
+    const { error } = await supabase.rpc('mark_direct_messages_read', {
+      p_sender_id: otherUserId
+    })
 
     if (error) {
       console.error('[notifications] mark conversation read failed:', error)
@@ -294,8 +291,18 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, [pushSupported, currentUserId])
 
+  const contextValue = useMemo(() => ({
+    totalUnread,
+    refreshUnreadCount,
+    setConversationRead,
+    setGroupRead,
+    pushEnabled,
+    pushSupported,
+    requestPush
+  }), [totalUnread, refreshUnreadCount, setConversationRead, setGroupRead, pushEnabled, pushSupported, requestPush])
+
   return (
-    <NotifContext.Provider value={{ totalUnread, refreshUnreadCount, setConversationRead, setGroupRead, pushEnabled, pushSupported, requestPush }}>
+    <NotifContext.Provider value={contextValue}>
       {children}
     </NotifContext.Provider>
   )
