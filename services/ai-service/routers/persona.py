@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from schemas.persona import PersonaRequest, PersonaResponse
-from pipelines.embedder import get_embedder
+from pipelines.embedder import get_embedder, get_kw_model
 from pipelines.supabase_client import get_supabase
 
 router = APIRouter()
@@ -33,21 +33,11 @@ async def generate_persona(request: PersonaRequest):
 
     parsed_embeddings = []
     skill_counter = Counter()
-    total_repos = len(res.data)
+    # Don't count the custom_tags chunk as a real repo
+    total_repos = sum(1 for r in res.data if r.get("repo_name") != "custom_tags")
     
-    if parsed_embeddings:
-        avg_embedding = np.mean(parsed_embeddings, axis=0).tolist()
-    else:
-        embedder = get_embedder()
-        avg_embedding = embedder.embed_query(f"Mock persona for {request.user_id}")
-        
-    try:
-        from keybert import KeyBERT
-        # Initialize KeyBERT with our existing SentenceTransformer model
-        _embedder = get_embedder()
-        kw_model = KeyBERT(model=_embedder.model)
-    except Exception:
-        kw_model = None
+    # Use the module-level singleton — never instantiate per-request
+    kw_model = get_kw_model()
 
     for row in res.data:
         emb = row.get("embedding")
@@ -56,17 +46,22 @@ async def generate_persona(request: PersonaRequest):
             
         metadata = row.get("metadata", {})
         if metadata:
-            if "languages" in metadata:
-                for lang in metadata["languages"]:
-                    skill_counter[lang] += 2  # Weight languages higher
-            if "topics" in metadata:
-                for topic in metadata["topics"]:
-                    # Clean topics (often lowercase-kebab) to be more readable
-                    display_topic = topic.replace("-", " ").title()
-                    skill_counter[display_topic] += 1
+            # Custom tags chunk — give those tags the highest weight so they always appear
+            if metadata.get("type") == "custom_tags":
+                for tag in metadata.get("tags", []):
+                    skill_counter[tag] += 5  # Highest weight for explicitly added tags
+            else:
+                if "languages" in metadata:
+                    for lang in metadata["languages"]:
+                        skill_counter[lang] += 2  # Weight languages higher
+                if "topics" in metadata:
+                    for topic in metadata["topics"]:
+                        # Clean topics (often lowercase-kebab) to be more readable
+                        display_topic = topic.replace("-", " ").title()
+                        skill_counter[display_topic] += 1
                 
         content = row.get("content", "")
-        if content:
+        if content and metadata.get("type") != "custom_tags":
             if skills_dict:
                 text_lower = content.lower()
                 for key, val in skills_dict.items():
@@ -83,7 +78,14 @@ async def generate_persona(request: PersonaRequest):
                 for kw, score in keywords:
                     if score > 0.3:
                         skill_counter[kw.title()] += 1
-            
+
+    # Compute average embedding AFTER iterating (was computed before loop — bug fix)
+    if parsed_embeddings:
+        avg_embedding = np.mean(parsed_embeddings, axis=0).tolist()
+    else:
+        embedder = get_embedder()
+        avg_embedding = embedder.embed_query(f"Mock persona for {request.user_id}")
+
 
     # Get top 30 skills
     top_skills = [skill for skill, count in skill_counter.most_common(30)]

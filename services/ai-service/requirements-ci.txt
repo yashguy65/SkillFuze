@@ -1,5 +1,5 @@
 fastapi==0.109.2
-pydantic==2.6.1
+pydantic>=2.7.0
 pytest==9.0.3
 pdfplumber==0.11.0
 langchain-core==0.1.53

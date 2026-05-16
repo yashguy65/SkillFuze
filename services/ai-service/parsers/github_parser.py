@@ -1,6 +1,12 @@
 import httpx
 from typing import List, Dict, Any
-from langchain_core.documents import Document
+from dataclasses import dataclass, field
+
+@dataclass
+class Document:
+    page_content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
 
 class GitHubParser:
     def __init__(self, token: str | None = None):
@@ -17,17 +23,17 @@ class GitHubParser:
             contributionsCollection {
               totalCommitContributions
             }
-            repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
+            repositories(first: 30, orderBy: {field: STARGAZERS, direction: DESC}) {
               nodes {
                 name
                 description
                 stargazerCount
-                languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+                languages(first: 5, orderBy: {field: SIZE, direction: DESC}) {
                   nodes {
                     name
                   }
                 }
-                repositoryTopics(first: 20) {
+                repositoryTopics(first: 10) {
                   nodes {
                     topic {
                       name

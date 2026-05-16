@@ -79,8 +79,24 @@ export default function SettingsPage() {
         github_username: githubUsername,
       })
 
-      // Auto-merge logic would typically go here if we wanted to update custom tags in settings
-      // For now, we'll just show success
+      // Save extracted tags to user_metadata so profile page can display them
+      if (result.extracted_tags && result.extracted_tags.length > 0) {
+        const supabase = createClient()
+        const { data: { user: freshUser } } = await supabase.auth.getUser()
+        const existingCustomTags: string[] = freshUser?.user_metadata?.custom_tags || []
+        const existingHiddenTags: string[] = freshUser?.user_metadata?.hidden_tags || []
+
+        // Merge: custom tags take priority, don't duplicate
+        const existingLower = new Set(existingCustomTags.map((t: string) => t.toLowerCase()))
+        const newTags = result.extracted_tags.filter(
+          (t: string) => !existingLower.has(t.toLowerCase())
+        )
+        const mergedTags = [...existingCustomTags, ...newTags]
+
+        await supabase.auth.updateUser({
+          data: { custom_tags: mergedTags, hidden_tags: existingHiddenTags }
+        })
+      }
 
       setSyncStatus('success')
       setSyncMessage(

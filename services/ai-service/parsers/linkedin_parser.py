@@ -7,6 +7,7 @@ from typing import List, Tuple
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+
 class LinkedInParser:
     def __init__(self):
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -14,8 +15,6 @@ class LinkedInParser:
             chunk_overlap=100,
             separators=["\n\n", "\n", " ", ""]
         )
-        
-        # Load skills dictionary
         dict_path = os.path.join(os.path.dirname(__file__), 'skills_dictionary.json')
         try:
             with open(dict_path, 'r', encoding='utf-8') as f:
