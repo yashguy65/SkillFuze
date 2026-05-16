@@ -208,6 +208,7 @@ function MessagesContent() {
   const chatProfilesRef = useRef<Map<string, DiscoverUser>>(new Map())
   const groupIdsRef = useRef<Set<string>>(new Set())
   const chatsRef = useRef<Chat[]>([])
+  const pendingUpdatesRef = useRef<Map<string, DbMessage>>(new Map())
 
   useEffect(() => {
     chatsRef.current = chats
@@ -476,6 +477,12 @@ function MessagesContent() {
             setChats((prevChats) => prevChats.map((chat) => {
               if (chat.kind !== 'direct' || chat.userId !== otherUserId) return chat
 
+              const messageExists = chat.messages.some((msg) => msg.id === updatedMsg.id)
+              if (!messageExists) {
+                pendingUpdatesRef.current.set(updatedMsg.id, updatedMsg)
+                return chat
+              }
+
               const messages = chat.messages.map((msg) => (
                 msg.id === updatedMsg.id
                   ? {
@@ -654,8 +661,15 @@ function MessagesContent() {
       setChats((prevChats) => prevChats.map((chat) => {
         if (chat.id !== selectedChat.id) return chat
 
+        const pendingUpdate = pendingUpdatesRef.current.get(inserted.id)
+        if (pendingUpdate) {
+          pendingUpdatesRef.current.delete(inserted.id)
+          inserted.status = pendingUpdate.status ?? inserted.status
+          inserted.text = pendingUpdate.text ?? inserted.text
+        }
+
         const messages = chat.messages.map((msg) => (
-          msg.id === tempId ? { ...toDirectMessage(inserted), status: msg.status } : msg
+          msg.id === tempId ? { ...toDirectMessage(inserted), status: inserted.status ?? msg.status } : msg
         ))
 
         return {

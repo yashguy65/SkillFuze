@@ -69,7 +69,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .eq('receiver_id', userId)
-      .neq('status', 'read')
+      .or('status.neq.read,status.is.null')
 
     if (directError) {
       console.error('[notifications] direct unread count failed:', directError)
@@ -214,7 +214,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .update({ status: 'read' })
       .eq('receiver_id', userId)
       .eq('sender_id', otherUserId)
-      .neq('status', 'read')
+      .or('status.neq.read,status.is.null')
 
     if (error) {
       console.error('[notifications] mark conversation read failed:', error)

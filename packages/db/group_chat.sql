@@ -56,17 +56,24 @@ alter table public.chat_groups enable row level security;
 alter table public.chat_group_members enable row level security;
 alter table public.chat_group_messages enable row level security;
 
+create or replace function public.is_group_member(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.chat_group_members
+    where group_id = p_group_id and user_id = auth.uid()
+  );
+$$;
+
 drop policy if exists "Group members can read groups" on public.chat_groups;
 create policy "Group members can read groups"
 on public.chat_groups for select
 using (
   created_by = auth.uid() or
-  exists (
-    select 1
-    from public.chat_group_members members
-    where members.group_id = chat_groups.id
-      and members.user_id = auth.uid()
-  )
+  public.is_group_member(id)
 );
 
 drop policy if exists "Authenticated users can create groups" on public.chat_groups;
@@ -81,7 +88,7 @@ using (
   exists (
     select 1
     from public.chat_group_members members
-    where members.group_id = chat_groups.id
+    where members.group_id = id
       and members.user_id = auth.uid()
       and members.role = 'owner'
   )
@@ -90,7 +97,7 @@ with check (
   exists (
     select 1
     from public.chat_group_members members
-    where members.group_id = chat_groups.id
+    where members.group_id = id
       and members.user_id = auth.uid()
       and members.role = 'owner'
   )
@@ -100,13 +107,7 @@ drop policy if exists "Group members can read memberships" on public.chat_group_
 create policy "Group members can read memberships"
 on public.chat_group_members for select
 using (
-  user_id = auth.uid()
-  or exists (
-    select 1
-    from public.chat_group_members viewer
-    where viewer.group_id = chat_group_members.group_id
-      and viewer.user_id = auth.uid()
-  )
+  public.is_group_member(group_id)
 );
 
 drop policy if exists "Group creators can add initial members" on public.chat_group_members;
@@ -116,7 +117,7 @@ with check (
   exists (
     select 1
     from public.chat_groups groups
-    where groups.id = chat_group_members.group_id
+    where groups.id = group_id
       and groups.created_by = auth.uid()
   )
 );
@@ -144,12 +145,7 @@ drop policy if exists "Group members can read messages" on public.chat_group_mes
 create policy "Group members can read messages"
 on public.chat_group_messages for select
 using (
-  exists (
-    select 1
-    from public.chat_group_members members
-    where members.group_id = chat_group_messages.group_id
-      and members.user_id = auth.uid()
-  )
+  public.is_group_member(group_id)
 );
 
 drop policy if exists "Group members can send messages" on public.chat_group_messages;
@@ -157,12 +153,7 @@ create policy "Group members can send messages"
 on public.chat_group_messages for insert
 with check (
   sender_id = auth.uid()
-  and exists (
-    select 1
-    from public.chat_group_members members
-    where members.group_id = chat_group_messages.group_id
-      and members.user_id = auth.uid()
-  )
+  and public.is_group_member(group_id)
 );
 
 do $$

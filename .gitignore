@@ -21,3 +21,4 @@ venv/
 env/
 .venv/
 pyrefly.toml
+scratch.ts
