@@ -40,21 +40,34 @@ SIM_HIGH = 0.75  # score at or above this becomes 100 %
 def _extract_skills(query: str) -> list[str]:
     """
     Extract recognized skill tokens from a natural language query.
-    Returns lowercase canonical keys found in the skills dictionary.
+    Returns lowercase canonical keys found in the skills dictionary,
+    in the order they appear, deduplicated.
     """
     q = query.lower()
     found: list[str] = []
+    seen: set[str] = set()
     used_spans: list[tuple[int, int]] = []
 
     for key in _SKILL_KEYS_SORTED:
-        # Build a word-boundary-aware pattern for the skill key
-        pattern = r"\b" + re.escape(key) + r"\b"
+        # Use lookaround assertions instead of \b so that symbol-containing
+        # skills like 'c++', 'c#', '.net' are matched correctly.
+        # \b fails when the token ends with a non-word character (e.g. '+')
+        # because it requires a \w↔\W transition, which doesn't exist between
+        # two adjacent non-word characters such as '+' and ' '.
+        pattern = r"(?<!\w)" + re.escape(key) + r"(?!\w)"
         for m in re.finditer(pattern, q):
             start, end = m.start(), m.end()
             # Don't count overlapping spans
             if any(s <= start < e or s < end <= e for s, e in used_spans):
                 continue
-            found.append(key)
+            # Guard against 'c' matching inside 'c++' or 'c#' –
+            # if the character immediately after the match is '+' or '#',
+            # skip this hit (it belongs to a longer token that wasn't matched).
+            if end < len(q) and q[end] in ('+', '#'):
+                continue
+            if key not in seen:
+                found.append(key)
+                seen.add(key)
             used_spans.append((start, end))
 
     return found
@@ -142,20 +155,15 @@ async def match_users(request: MatchRequest):
     if is_search:
         raw_query = request.search_query.strip()
 
-        # 1) Try to extract known skills from the raw query
+        # 1) Extract known skills for the reranking boost (the 'Bands')
         queried_skills = _extract_skills(raw_query)
 
-        if queried_skills:
-            # We found recognizable skills → embed just the skill names so the
-            # vector search finds developers with those skills precisely.
-            skill_text = " ".join(queried_skills)
-            query_embedding = np.array(embedder.embed_query(skill_text))
-        else:
-            # No recognizable skill tokens → strip intent filler words and embed
-            # what remains (domain/concept search).
-            stripped = _strip_intent_words(raw_query)
-            embed_text = stripped if stripped else raw_query
-            query_embedding = np.array(embedder.embed_query(embed_text))
+        # 2) Embed the cleaned version of the FULL query for the initial retrieval.
+        # This ensures that unknown skills (e.g. 'woodchipping') are still
+        # part of the vector search, even if they aren't in our dictionary.
+        stripped = _strip_intent_words(raw_query)
+        embed_text = stripped if stripped else raw_query
+        query_embedding = np.array(embedder.embed_query(embed_text))
 
     # Normalise so cosine distance stays meaningful
     norm = np.linalg.norm(query_embedding)
@@ -247,7 +255,11 @@ async def match_users(request: MatchRequest):
         sim = _calibrate(raw_sim)
 
         if is_search and queried_skills:
-            # ── Multi-skill search boost ──────────────────────────────────
+            # ── Multi-skill search: banded scoring ────────────────────────
+            # match_ratio is the PRIMARY ranking key; cosine sim is a tiebreaker
+            # within a band.  This guarantees a 5/5 match always beats a 4/5,
+            # regardless of vector similarity or star count.
+
             # Normalise user languages for comparison (lowercase, no extra spaces)
             user_langs_lower = {l.lower().strip() for l in skills_map.get(uid, Counter()).keys()}
             # Also check canonical names from the skills dictionary
@@ -269,14 +281,30 @@ async def match_users(request: MatchRequest):
 
             total_queried = len(queried_skills)
             match_ratio = matched_count / total_queried if total_queried > 0 else 0.0
+            calibrated = _calibrate(raw_sim)  # 0–1, used as tiebreaker only
 
+            # Banded scoring: each band is 0.15 wide; cosine fills the top 0.05
+            # of each band so bands never overlap.
+            #   100%  → [0.95, 1.00)
+            #   ≥ 80% → [0.80, 0.95)
+            #   ≥ 60% → [0.65, 0.80)
+            #   ≥ 40% → [0.50, 0.65)
+            #   ≥ 20% → [0.35, 0.50)
+            #   0%    → [0.00, 0.35)  (pure cosine, no match)
             if match_ratio == 1.0:
-                # All queried skills present → guaranteed very high score
-                sim = max(sim, 0.90 + match_ratio * 0.09)  # 0.90–0.99
-            elif match_ratio > 0:
-                # Partial match → interpolate between calibrated sim and 0.90
-                boost_target = 0.60 + match_ratio * 0.30   # 0.60–0.90
-                sim = max(sim, boost_target)
+                sim = 0.95 + calibrated * 0.049   # 0.950 – 0.999
+            elif match_ratio >= 0.8:
+                sim = 0.80 + calibrated * 0.149   # 0.800 – 0.949
+            elif match_ratio >= 0.6:
+                sim = 0.65 + calibrated * 0.149   # 0.650 – 0.799
+            elif match_ratio >= 0.4:
+                sim = 0.50 + calibrated * 0.149   # 0.500 – 0.649
+            elif match_ratio >= 0.2:
+                sim = 0.35 + calibrated * 0.149   # 0.350 – 0.499
+            else:
+                # No matching skills at all – keep calibrated cosine but cap below
+                # the lowest partial-match band so they never outrank real matches.
+                sim = calibrated * 0.34            # 0.000 – 0.340
 
             # Surface matched skills at the top of the skills list
             for display in reversed(matched_display):
@@ -290,10 +318,11 @@ async def match_users(request: MatchRequest):
             # Concept / free-text search (no recognised skills) – keep calibrated sim
             pass
 
-        # Small quality boost for highly starred devs (up to +0.05)
+        # Small quality boost for highly starred devs (up to +0.02).
+        # Intentionally tiny so it never crosses a band boundary.
         user_stars = total_stars_map.get(uid, 0)
         if user_stars > 0:
-            star_boost = min(np.log1p(user_stars) * 0.005, 0.05)
+            star_boost = min(np.log1p(user_stars) * 0.002, 0.02)
             sim = min(sim + star_boost, 1.0)
 
         sim = min(sim, 1.0)
