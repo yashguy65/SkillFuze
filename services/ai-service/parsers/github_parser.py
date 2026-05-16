@@ -17,17 +17,17 @@ class GitHubParser:
             contributionsCollection {
               totalCommitContributions
             }
-            repositories(first: 10, orderBy: {field: STARGAZERS, direction: DESC}) {
+            repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
               nodes {
                 name
                 description
                 stargazerCount
-                languages(first: 5, orderBy: {field: SIZE, direction: DESC}) {
+                languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
                   nodes {
                     name
                   }
                 }
-                repositoryTopics(first: 5) {
+                repositoryTopics(first: 20) {
                   nodes {
                     topic {
                       name
@@ -109,6 +109,6 @@ class GitHubParser:
                     pass
 
                 repo_content = f"Repository: {repo_name}\nDescription: {desc}\nLanguages: {lang_names}\nTopics: {', '.join(topics)}\nREADME: {readme_text}"
-                documents.append(Document(page_content=repo_content, metadata={**base_meta, "repo": repo_name, "languages": languages, "stars": stars}))
+                documents.append(Document(page_content=repo_content, metadata={**base_meta, "repo": repo_name, "languages": languages, "topics": topics, "stars": stars}))
 
             return documents

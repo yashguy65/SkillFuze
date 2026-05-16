@@ -40,15 +40,22 @@ async def ingest_github_data(request: GitHubIngestRequest):
             "embedding": emb
         })
         
-    # Collect unique languages across all repo docs to return as tags
-    seen_langs: set = set()
+    # Collect unique languages and topics across all repo docs to return as tags
+    seen_tags: set = set()
     extracted_tags: list = []
     for doc in documents:
+        # Collect languages
         for lang in doc.metadata.get("languages", []):
             lang_lower = lang.lower()
-            if lang_lower not in seen_langs:
-                seen_langs.add(lang_lower)
+            if lang_lower not in seen_tags:
+                seen_tags.add(lang_lower)
                 extracted_tags.append(lang)
+        # Collect topics
+        for topic in doc.metadata.get("topics", []):
+            topic_lower = topic.lower()
+            if topic_lower not in seen_tags:
+                seen_tags.add(topic_lower)
+                extracted_tags.append(topic)
 
     try:
         # Delete old chunks for this user to avoid duplicates on re-ingest (excluding custom_tags)
