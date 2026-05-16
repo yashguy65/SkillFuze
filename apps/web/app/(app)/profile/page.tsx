@@ -1,12 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { syncGitHub, getPersona, ingestTags, syncLinkedIn } from '@/lib/ai-service'
-import { GitBranch, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink, Plus, X, FileUp } from 'lucide-react'
-
-type SyncStatus = 'idle' | 'loading' | 'success' | 'error'
+import { getPersona, ingestTags } from '@/lib/ai-service'
+import { GitBranch, Loader2, ExternalLink, Plus, X } from 'lucide-react'
 
 export default function ProfilePage() {
   const [user, setUser] = useState<{
@@ -14,13 +11,6 @@ export default function ProfilePage() {
     email: string | undefined
     user_metadata: Record<string, string>
   } | null>(null)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
-  const [syncMessage, setSyncMessage] = useState('')
-
-  // LinkedIn Sync State
-  const [linkedinSyncStatus, setLinkedinSyncStatus] = useState<SyncStatus>('idle')
-  const [linkedinSyncMessage, setLinkedinSyncMessage] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [skills, setSkills] = useState<string[]>([])
   const [hiddenTags, setHiddenTags] = useState<string[]>([])
@@ -76,128 +66,6 @@ export default function ProfilePage() {
   const handle = user.user_metadata?.user_name || user.email?.split('@')[0] || 'user'
   const avatar = user.user_metadata?.avatar_url
   const githubUsername = user.user_metadata?.user_name
-
-  const handleSyncGitHub = async () => {
-    if (!githubUsername) {
-      setSyncStatus('error')
-      setSyncMessage('No GitHub username found on your account.')
-      return
-    }
-
-    setSyncStatus('loading')
-    setSyncMessage('')
-
-    try {
-      const result = await syncGitHub({
-        user_id: user.id,
-        github_username: githubUsername,
-      })
-
-      // Auto-merge extracted language tags into custom tags (same as LinkedIn sync)
-      if (result.extracted_tags && result.extracted_tags.length > 0) {
-        const newTags = result.extracted_tags.filter(
-          tag => !customTags.some(ct => ct.toLowerCase() === tag.toLowerCase())
-        )
-        if (newTags.length > 0) {
-          const updatedTags = [...customTags, ...newTags]
-          const supabase = createClient()
-          const { error } = await supabase.auth.updateUser({
-            data: { custom_tags: updatedTags }
-          })
-          if (!error) {
-            setCustomTags(updatedTags)
-            try {
-              await ingestTags({ user_id: user.id, tags: updatedTags })
-            } catch (err) {
-              console.error('Failed to sync GitHub tags to AI service', err)
-            }
-          }
-        }
-      }
-
-      // Refresh persona to get updated languages
-      const persona = await getPersona({ user_id: user.id }).catch(() => null)
-      if (persona) setSkills(persona.skills)
-
-      setSyncStatus('success')
-      setSyncMessage(
-        result.chunks_stored === 0
-          ? 'Sync complete — no new data found.'
-          : `Sync complete! ${result.chunks_stored} code chunks indexed.`
-      )
-    } catch (err: unknown) {
-      setSyncStatus('error')
-      setSyncMessage(err instanceof Error ? err.message : 'Sync failed. Please try again.')
-    } finally {
-      // Reset after 6 s so the button is usable again
-      setTimeout(() => setSyncStatus('idle'), 6000)
-    }
-  }
-
-  const handleSyncLinkedIn = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // 5MB limit
-    if (file.size > 5 * 1024 * 1024) {
-      setLinkedinSyncStatus('error')
-      setLinkedinSyncMessage('File size exceeds 5MB limit.')
-      return
-    }
-
-    if (file.type !== 'application/pdf') {
-      setLinkedinSyncStatus('error')
-      setLinkedinSyncMessage('Please upload a valid PDF file.')
-      return
-    }
-
-    setLinkedinSyncStatus('loading')
-    setLinkedinSyncMessage('')
-
-    try {
-      const result = await syncLinkedIn(user.id, file)
-
-      // Refresh persona to get updated skills from LinkedIn
-      const persona = await getPersona({ user_id: user.id }).catch(() => null)
-      if (persona) setSkills(persona.skills)
-
-      // Auto-add extracted tags to custom tags
-      if (result.extracted_tags && result.extracted_tags.length > 0) {
-        const newTags = result.extracted_tags.filter(tag => !customTags.some(ct => ct.toLowerCase() === tag.toLowerCase()))
-        if (newTags.length > 0) {
-          const updatedTags = [...customTags, ...newTags]
-          const supabase = createClient()
-          const { error } = await supabase.auth.updateUser({
-            data: { custom_tags: updatedTags }
-          })
-          if (!error) {
-            setCustomTags(updatedTags)
-            try {
-              await ingestTags({ user_id: user.id, tags: updatedTags })
-            } catch (err) {
-              console.error('Failed to sync tags to AI service', err)
-            }
-          }
-        }
-      }
-
-      setLinkedinSyncStatus('success')
-      setLinkedinSyncMessage(
-        result.chunks_stored === 0
-          ? 'Sync complete — no data extracted.'
-          : `Sync complete! LinkedIn profile indexed.`
-      )
-    } catch (err: unknown) {
-      setLinkedinSyncStatus('error')
-      setLinkedinSyncMessage(err instanceof Error ? err.message : 'Upload failed. Please try again.')
-    } finally {
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      setTimeout(() => setLinkedinSyncStatus('idle'), 6000)
-    }
-  }
 
   const handleAddTag = async () => {
     if (!newTagVal.trim() || !user) return
@@ -295,46 +163,6 @@ export default function ProfilePage() {
     setIsSavingPref(false)
   }
 
-  const syncButtonContent = () => {
-    switch (syncStatus) {
-      case 'loading':
-        return (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Syncing…
-          </>
-        )
-      case 'success':
-        return (
-          <>
-            <CheckCircle2 className="w-4 h-4" />
-            Synced!
-          </>
-        )
-      case 'error':
-        return (
-          <>
-            <AlertCircle className="w-4 h-4" />
-            Retry Sync
-          </>
-        )
-      default:
-        return (
-          <>
-            <GitBranch className="w-4 h-4" />
-            Sync GitHub
-          </>
-        )
-    }
-  }
-
-  const syncButtonClass = {
-    idle: 'bg-slate-800 hover:bg-blue-500/10 text-slate-200 hover:text-blue-300 border border-slate-700 hover:border-blue-500/40',
-    loading: 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed',
-    success: 'bg-blue-500/10 text-blue-300 border border-blue-500/40',
-    error: 'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20',
-  }[syncStatus]
-
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       <main className="w-full max-w-md bg-slate-900/50 border border-slate-800 rounded-3xl p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col items-center">
@@ -363,114 +191,6 @@ export default function ProfilePage() {
             github.com/{githubUsername}
             <ExternalLink className="w-3 h-3" />
           </a>
-        )}
-
-        <input
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          ref={fileInputRef}
-          onChange={handleSyncLinkedIn}
-        />
-
-        {/* ── Sync Source ───────────────────────────────────────────────── */}
-        {githubUsername ? (
-          <div className="w-full mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-                GitHub Sync
-              </h2>
-              {syncStatus === 'success' && (
-                <span className="text-xs text-blue-400 font-medium">
-                  ✓ Up to date
-                </span>
-              )}
-            </div>
-
-            <button
-              id="sync-github-btn"
-              onClick={handleSyncGitHub}
-              disabled={syncStatus === 'loading'}
-              className={`
-                w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
-                text-sm font-semibold transition-all duration-300
-                ${syncButtonClass}
-                disabled:cursor-not-allowed
-              `}
-            >
-              {syncButtonContent()}
-            </button>
-
-            {/* Status message */}
-            {syncMessage && (
-              <p
-                className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${syncMessage.includes('complete') || syncStatus === 'success'
-                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                  }`}
-              >
-                {syncMessage}
-              </p>
-            )}
-
-            <p className="mt-2 text-xs text-slate-600 text-center">
-              Indexes your public repos &amp; activity for AI matching
-            </p>
-          </div>
-        ) : (
-          <div className="w-full mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-                LinkedIn Sync
-              </h2>
-              {linkedinSyncStatus === 'success' && (
-                <span className="text-xs text-blue-400 font-medium">
-                  ✓ Up to date
-                </span>
-              )}
-            </div>
-
-            <button
-              id="sync-linkedin-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={linkedinSyncStatus === 'loading'}
-              className={`
-                w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
-                text-sm font-semibold transition-all duration-300
-                ${linkedinSyncStatus === 'idle' ? 'bg-slate-800 hover:bg-blue-500/10 text-slate-200 hover:text-blue-300 border border-slate-700 hover:border-blue-500/40' : ''}
-                ${linkedinSyncStatus === 'loading' ? 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed' : ''}
-                ${linkedinSyncStatus === 'success' ? 'bg-blue-500/10 text-blue-300 border border-blue-500/40' : ''}
-                ${linkedinSyncStatus === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/40 hover:bg-red-500/20' : ''}
-                disabled:cursor-not-allowed
-              `}
-            >
-              {linkedinSyncStatus === 'loading' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Syncing…</>
-              ) : linkedinSyncStatus === 'success' ? (
-                <><CheckCircle2 className="w-4 h-4" /> Synced!</>
-              ) : linkedinSyncStatus === 'error' ? (
-                <><AlertCircle className="w-4 h-4" /> Retry Upload</>
-              ) : (
-                <><FileUp className="w-4 h-4" /> Upload Profile PDF</>
-              )}
-            </button>
-
-            {/* Status message */}
-            {linkedinSyncMessage && (
-              <p
-                className={`mt-3 text-xs text-center font-medium px-3 py-2 rounded-lg ${linkedinSyncMessage.includes('complete') || linkedinSyncStatus === 'success'
-                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                  }`}
-              >
-                {linkedinSyncMessage}
-              </p>
-            )}
-
-            <p className="mt-2 text-xs text-slate-600 text-center">
-              Go to <a href="https://www.linkedin.com/in/me/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">your LinkedIn profile</a>, click <strong>More</strong> → <strong>Save to PDF</strong>, then upload it here.
-            </p>
-          </div>
         )}
 
         {/* ── Collaboration Preference ───────────────────────────────────── */}
@@ -566,46 +286,10 @@ export default function ProfilePage() {
             })()}
             {skills.length === 0 && customTags.length === 0 && (
               <span className="text-sm text-slate-500 italic ml-1">
-                Sync GitHub or upload LinkedIn PDF to add tags
+                Sync GitHub or upload LinkedIn PDF in Settings to add tags
               </span>
             )}
           </div>
-        </div>
-
-
-
-        {/* Quick Actions */}
-        <div className="w-full space-y-3 pt-6 border-t border-slate-800">
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={linkedinSyncStatus === 'loading'}
-            className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium disabled:opacity-50"
-          >
-            {linkedinSyncStatus === 'loading' ? (
-              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-            ) : linkedinSyncStatus === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-blue-400" />
-            ) : linkedinSyncStatus === 'error' ? (
-              <AlertCircle className="w-4 h-4 text-red-400" />
-            ) : (
-              <span className="text-blue-500 font-bold group-hover:translate-x-1 transition-transform">&gt;</span>
-            )}
-            Add LinkedIn (PDF)
-          </button>
-          {githubUsername && linkedinSyncMessage && (
-            <p className={`text-xs ${linkedinSyncStatus === 'error' ? 'text-red-400' : 'text-blue-400'} ml-6`}>
-              {linkedinSyncMessage}
-            </p>
-          )}
-          <button
-            onClick={handleSyncGitHub}
-            disabled={syncStatus === 'loading'}
-            className="flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors group w-full text-left text-sm font-medium disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 text-blue-500 ${syncStatus === 'loading' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
-            Re-sync GitHub Data
-          </button>
         </div>
       </main>
     </div>

@@ -1,6 +1,6 @@
 import os
 from fastapi import APIRouter, HTTPException
-from schemas.ingest import GitHubIngestRequest, IngestResponse
+from schemas.ingest import GitHubIngestRequest, IngestResponse, PurgeRequest, PurgeResponse
 from parsers.github_parser import GitHubParser
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
@@ -62,3 +62,15 @@ async def ingest_github_data(request: GitHubIngestRequest):
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
     return IngestResponse(chunks_stored=chunks_stored, extracted_tags=extracted_tags)
+
+@router.post("/ingest/purge", response_model=PurgeResponse)
+async def purge_user_data(request: PurgeRequest):
+    supabase = get_supabase()
+    try:
+        res = supabase.table("github_chunks").delete().eq("user_id", request.user_id).execute()
+        # Suppress type errors for data count if needed, or just assume it works.
+        deleted_count = len(res.data) if res.data else 0
+        return PurgeResponse(success=True, chunks_deleted=deleted_count)
+    except Exception as e:
+        print("Supabase Error during purge:", str(e))
+        raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")

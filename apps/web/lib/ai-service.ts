@@ -138,3 +138,30 @@ export async function getPersona(payload: PersonaRequest): Promise<PersonaRespon
 
   return res.json() as Promise<PersonaResponse>
 }
+
+// ── Purge ─────────────────────────────────────────────────────────────────────
+
+export interface PurgeRequest {
+  user_id: string
+}
+
+export interface PurgeResponse {
+  success: boolean
+  chunks_deleted: number
+}
+
+export async function purgeData(payload: PurgeRequest): Promise<PurgeResponse> {
+  const res = await fetch('/api/ai/purge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? 'Failed to purge data')
+  }
+
+  return res.json() as Promise<PurgeResponse>
+}
+

@@ -29,7 +29,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
     { icon: Home, label: 'Home', href: '/dashboard' },
     { icon: User, label: 'Profile', href: '/profile' },
     { icon: MessageSquare, label: 'Chat', href: '/messages', badge: totalUnread },
-    { icon: Settings, label: 'Settings', href: '#' },
+    { icon: Settings, label: 'Settings', href: '/settings' },
   ]
 
   return (

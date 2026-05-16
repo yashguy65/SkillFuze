@@ -9,3 +9,10 @@ class GitHubIngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     chunks_stored: int
     extracted_tags: Optional[List[str]] = None
+
+class PurgeRequest(BaseModel):
+    user_id: str
+
+class PurgeResponse(BaseModel):
+    success: bool
+    chunks_deleted: int
