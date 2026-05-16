@@ -22,3 +22,4 @@ env/
 .venv/
 pyrefly.toml
 scratch.ts
+.internal-repo/

@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "secrets:pull": "powershell ./scripts/sync-internal.ps1 pull",
+    "secrets:push": "powershell ./scripts/sync-internal.ps1 push"
   },
   "keywords": [],
   "author": "",
