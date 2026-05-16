@@ -120,7 +120,9 @@ export interface PersonaRequest {
 
 export interface PersonaResponse {
   summary: string
+  role: string
   skills: string[]
+  highlights: string[]
   embedding: number[]
 }
 

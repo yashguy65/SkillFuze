@@ -238,6 +238,9 @@ async def match_users(request: MatchRequest):
             skills_map[uid] = Counter()
         for lang in meta.get("languages", []):
             skills_map[uid][lang] += 1
+        for topic in meta.get("topics", []):
+            display_topic = topic.replace("-", " ").title()
+            skills_map[uid][display_topic] += 1
 
         if uid not in total_stars_map:
             total_stars_map[uid] = 0
@@ -247,7 +250,7 @@ async def match_users(request: MatchRequest):
     results: list[MatchResult] = []
 
     for uid, info in user_best.items():
-        top_skills = [lang for lang, _ in skills_map.get(uid, Counter()).most_common(5)]
+        top_skills = [lang for lang, _ in skills_map.get(uid, Counter()).most_common(20)]
 
         raw_sim = info["similarity"]
 
@@ -312,7 +315,7 @@ async def match_users(request: MatchRequest):
                 # Remove any existing entry with this name (case-insensitive)
                 top_skills = [s for s in top_skills if s.lower().strip() != display_norm]
                 top_skills.insert(0, display)
-            top_skills = top_skills[:5]
+            top_skills = top_skills[:20]
 
         elif is_search and not queried_skills:
             # Concept / free-text search (no recognised skills) – keep calibrated sim

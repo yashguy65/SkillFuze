@@ -14,6 +14,16 @@ export default function ProfilePage() {
 
   const [skills, setSkills] = useState<string[]>([])
   const [hiddenTags, setHiddenTags] = useState<string[]>([])
+  
+  // Persona State
+  const [personaRole, setPersonaRole] = useState<string>('')
+  const [personaSummary, setPersonaSummary] = useState<string>('')
+  const [personaHighlights, setPersonaHighlights] = useState<string[]>([])
+  
+  const [isEditingPersona, setIsEditingPersona] = useState(false)
+  const [editRole, setEditRole] = useState('')
+  const [editSummary, setEditSummary] = useState('')
+  const [isSavingPersona, setIsSavingPersona] = useState(false)
 
   // Custom Tags State
   const [customTags, setCustomTags] = useState<string[]>([])
@@ -49,7 +59,12 @@ export default function ProfilePage() {
         }
 
         getPersona({ user_id: user.id })
-          .then(data => setSkills(data.skills))
+          .then(data => {
+            setSkills(data.skills)
+            setPersonaHighlights(data.highlights || [])
+            setPersonaRole(user.user_metadata?.custom_persona_role || data.role || 'Developer')
+            setPersonaSummary(user.user_metadata?.custom_persona_summary || data.summary || '')
+          })
           .catch(() => setSkills([]))
       }
     })
@@ -163,6 +178,25 @@ export default function ProfilePage() {
     setIsSavingPref(false)
   }
 
+  const handleSavePersona = async () => {
+    if (!user) return
+    setIsSavingPersona(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        custom_persona_role: editRole,
+        custom_persona_summary: editSummary
+      }
+    })
+    
+    if (!error) {
+      setPersonaRole(editRole)
+      setPersonaSummary(editSummary)
+      setIsEditingPersona(false)
+    }
+    setIsSavingPersona(false)
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       <main className="w-full max-w-md bg-slate-900/50 border border-slate-800 rounded-3xl p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col items-center">
@@ -192,6 +226,86 @@ export default function ProfilePage() {
             <ExternalLink className="w-3 h-3" />
           </a>
         )}
+
+        {/* ── Persona Section ───────────────────────────────────── */}
+        <div className="w-full mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider ml-1">
+              AI Persona
+            </h2>
+            {!isEditingPersona && (
+              <button
+                onClick={() => {
+                  setEditRole(personaRole)
+                  setEditSummary(personaSummary)
+                  setIsEditingPersona(true)
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          {isEditingPersona ? (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 mb-1.5 block font-medium">Role</label>
+                <input
+                  type="text"
+                  value={editRole}
+                  onChange={e => setEditRole(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500/50 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1.5 block font-medium">Summary</label>
+                <textarea
+                  value={editSummary}
+                  onChange={e => setEditSummary(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500/50 transition-colors resize-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsEditingPersona(false)}
+                  className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePersona}
+                  disabled={isSavingPersona}
+                  className="px-4 py-1.5 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 disabled:opacity-50 border border-blue-500/20"
+                >
+                  {isSavingPersona && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 shadow-sm">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-blue-500/10 to-teal-500/10 text-blue-400 rounded-full text-xs font-medium border border-blue-500/20 mb-3">
+                <span className="text-[10px]">✨</span> {personaRole || 'Developer'}
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed mb-4">
+                {personaSummary || "Sync your GitHub or LinkedIn to generate a rich AI persona."}
+              </p>
+              
+              {personaHighlights.length > 0 && (
+                <div className="space-y-2.5 border-t border-slate-800/50 pt-4 mt-2">
+                  {personaHighlights.map((hl, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-slate-400">
+                      <div className="w-1 h-1 rounded-full bg-blue-500/50 mt-1.5 flex-shrink-0" />
+                      <span>{hl}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── Collaboration Preference ───────────────────────────────────── */}
         <div className="w-full mb-8">

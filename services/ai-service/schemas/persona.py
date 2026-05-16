@@ -6,5 +6,7 @@ class PersonaRequest(BaseModel):
 
 class PersonaResponse(BaseModel):
     summary: str
+    role: str
     skills: List[str]
+    highlights: List[str]
     embedding: List[float]

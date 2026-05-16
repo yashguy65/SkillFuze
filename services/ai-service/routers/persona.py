@@ -17,15 +17,46 @@ async def generate_persona(request: PersonaRequest):
     if not res.data:
         raise HTTPException(status_code=404, detail="No data found for user")
         
-    # Calculate average embedding to represent the user's overall persona
     import json
     import numpy as np
+    import os
+    import re
+    from collections import Counter
     
+    # Load skills dictionary
+    dict_path = os.path.join(os.path.dirname(__file__), "..", "parsers", "skills_dictionary.json")
+    try:
+        with open(dict_path, "r", encoding="utf-8") as f:
+            skills_dict = json.load(f)
+    except Exception:
+        skills_dict = {}
+
     parsed_embeddings = []
+    skill_counter = Counter()
+    total_repos = len(res.data)
+    
     for row in res.data:
         emb = row.get("embedding")
         if emb:
             parsed_embeddings.append(json.loads(emb) if isinstance(emb, str) else emb)
+            
+        metadata = row.get("metadata", {})
+        if metadata:
+            if "languages" in metadata:
+                for lang in metadata["languages"]:
+                    skill_counter[lang] += 2  # Weight languages higher
+            if "topics" in metadata:
+                for topic in metadata["topics"]:
+                    # Clean topics (often lowercase-kebab) to be more readable
+                    display_topic = topic.replace("-", " ").title()
+                    skill_counter[display_topic] += 1
+                
+        content = row.get("content", "")
+        if content and skills_dict:
+            text_lower = content.lower()
+            for key, val in skills_dict.items():
+                if re.search(rf"\b{re.escape(key)}\b", text_lower):
+                    skill_counter[val] += 1
             
     if parsed_embeddings:
         avg_embedding = np.mean(parsed_embeddings, axis=0).tolist()
@@ -33,24 +64,55 @@ async def generate_persona(request: PersonaRequest):
         embedder = get_embedder()
         avg_embedding = embedder.embed_query(f"Mock persona for {request.user_id}")
         
-    # Extract languages from metadata to find top 4
-    from collections import Counter
-    lang_counter = Counter()
-    for row in res.data:
-        metadata = row.get("metadata", {})
-        if metadata and "languages" in metadata:
-            for lang in metadata["languages"]:
-                lang_counter[lang] += 1
-                
-    # Get top 4 languages
-    top_languages = [lang for lang, count in lang_counter.most_common(4)]
-    if not top_languages:
-        top_languages = ["Unknown"]
+    # Get top 30 skills
+    top_skills = [skill for skill, count in skill_counter.most_common(30)]
+    if not top_skills:
+        top_skills = ["Software Development"]
         
-    # TODO: Generate a text summary using an LLM and spacy (Phase 3)
-    
+    # Determine Role
+    FRONTEND_SKILLS = {"React", "Vue.js", "Angular", "HTML", "CSS", "TypeScript", "Tailwind CSS", "Next.js"}
+    BACKEND_SKILLS = {"Node.js", "Python", "Go", "Java", "C#", "Ruby", "PHP", "SQL", "PostgreSQL", "MongoDB", "Docker", "AWS"}
+    DATA_SKILLS = {"Python", "Machine Learning", "Data Science", "Pandas", "NumPy", "TensorFlow", "PyTorch", "SQL"}
+    MOBILE_SKILLS = {"React Native", "Swift", "Kotlin", "Dart"}
+    GAME_SKILLS = {"C++", "C#", "GDScript", "Unity 3D", "Unreal Engine"}
+
+    scores = {"Frontend": 0, "Backend": 0, "Data/ML": 0, "Mobile": 0, "Game Dev": 0}
+    for skill in top_skills:
+        if skill in FRONTEND_SKILLS: scores["Frontend"] += 1
+        if skill in BACKEND_SKILLS: scores["Backend"] += 1
+        if skill in DATA_SKILLS: scores["Data/ML"] += 1
+        if skill in MOBILE_SKILLS: scores["Mobile"] += 1
+        if skill in GAME_SKILLS: scores["Game Dev"] += 1
+        
+    top_category = max(scores, key=scores.get)
+    if scores[top_category] == 0:
+        role = "Software Developer"
+    elif scores["Frontend"] > 0 and scores["Backend"] > 0:
+        role = "Full-stack Developer"
+    else:
+        role = f"{top_category} Developer"
+        if top_category == "Data/ML": role = "Data/ML Engineer"
+
+    # Generate Templated Summary
+    if len(top_skills) > 2:
+        primary_skills = ", ".join(top_skills[:2])
+        other_skills = ", ".join(top_skills[2:])
+        summary = f"Highly active {role} with experience across {total_repos} repositories. Strongest expertise in {primary_skills}, with additional experience in {other_skills}."
+    else:
+        summary = f"Active {role} focusing on {top_skills[0]} across {total_repos} repositories."
+
+    # Highlights
+    highlights = [
+        f"Active in {total_repos}+ repositories",
+        f"Primary focus: {top_skills[0]}" if top_skills else "Generalist Developer"
+    ]
+    if len(top_skills) > 1:
+        highlights.append(f"Strong experience in {top_skills[1]}")
+
     return PersonaResponse(
-        summary=f"Stub summary for {request.user_id} based on {len(res.data)} repos/chunks.",
-        skills=top_languages,
+        summary=summary,
+        role=role,
+        skills=top_skills,
+        highlights=highlights,
         embedding=avg_embedding
     )

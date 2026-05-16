@@ -122,9 +122,12 @@ class TestPersonaSchemas:
     def test_response(self):
         resp = PersonaResponse(
             summary="Test summary",
+            role="Frontend Developer",
             skills=["python"],
+            highlights=["Active in 5+ repos"],
             embedding=[0.1] * 384,
         )
+        assert resp.role == "Frontend Developer"
         assert len(resp.embedding) == 384
 
     def test_request_missing_user_id(self):

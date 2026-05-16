@@ -22,9 +22,14 @@ export async function GET() {
     const userSkills: Record<string, Record<string, number>> = {}
     chunks?.forEach(chunk => {
       const langs = chunk.metadata?.languages || []
+      const topics = chunk.metadata?.topics || []
       if (!userSkills[chunk.user_id]) userSkills[chunk.user_id] = {}
       langs.forEach((lang: string) => {
-        userSkills[chunk.user_id][lang] = (userSkills[chunk.user_id][lang] || 0) + 1
+        userSkills[chunk.user_id][lang] = (userSkills[chunk.user_id][lang] || 0) + 2 // Weight languages higher
+      })
+      topics.forEach((topic: string) => {
+        const displayTopic = topic.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        userSkills[chunk.user_id][displayTopic] = (userSkills[chunk.user_id][displayTopic] || 0) + 1
       })
     })
 
@@ -34,7 +39,7 @@ export async function GET() {
       const sortedSkills = Object.entries(skillCounts)
         .sort((a, b) => b[1] - a[1])
         .map(entry => entry[0])
-        .slice(0, 5)
+        .slice(0, 20)
 
       const fallbackSkills = u.user_metadata?.custom_tags || []
       const finalSkills = sortedSkills.length > 0 ? sortedSkills : fallbackSkills
