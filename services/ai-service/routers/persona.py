@@ -35,6 +35,20 @@ async def generate_persona(request: PersonaRequest):
     skill_counter = Counter()
     total_repos = len(res.data)
     
+    if parsed_embeddings:
+        avg_embedding = np.mean(parsed_embeddings, axis=0).tolist()
+    else:
+        embedder = get_embedder()
+        avg_embedding = embedder.embed_query(f"Mock persona for {request.user_id}")
+        
+    try:
+        from keybert import KeyBERT
+        # Initialize KeyBERT with our existing SentenceTransformer model
+        _embedder = get_embedder()
+        kw_model = KeyBERT(model=_embedder.model)
+    except Exception:
+        kw_model = None
+
     for row in res.data:
         emb = row.get("embedding")
         if emb:
@@ -52,18 +66,25 @@ async def generate_persona(request: PersonaRequest):
                     skill_counter[display_topic] += 1
                 
         content = row.get("content", "")
-        if content and skills_dict:
-            text_lower = content.lower()
-            for key, val in skills_dict.items():
-                if re.search(rf"\b{re.escape(key)}\b", text_lower):
-                    skill_counter[val] += 1
+        if content:
+            if skills_dict:
+                text_lower = content.lower()
+                for key, val in skills_dict.items():
+                    if re.search(rf"\b{re.escape(key)}\b", text_lower):
+                        skill_counter[val] += 1
+                        
+            if kw_model:
+                keywords = kw_model.extract_keywords(
+                    content,
+                    keyphrase_ngram_range=(1, 2),
+                    stop_words="english",
+                    top_n=5
+                )
+                for kw, score in keywords:
+                    if score > 0.3:
+                        skill_counter[kw.title()] += 1
             
-    if parsed_embeddings:
-        avg_embedding = np.mean(parsed_embeddings, axis=0).tolist()
-    else:
-        embedder = get_embedder()
-        avg_embedding = embedder.embed_query(f"Mock persona for {request.user_id}")
-        
+
     # Get top 30 skills
     top_skills = [skill for skill, count in skill_counter.most_common(30)]
     if not top_skills:

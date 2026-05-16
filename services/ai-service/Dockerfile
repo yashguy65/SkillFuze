@@ -12,7 +12,6 @@ COPY requirements.txt .
 RUN pip install --default-timeout=100 -r requirements.txt \
     && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 # Future NER/persona work:
-# RUN pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
 
 COPY main.py .
 COPY parsers ./parsers
