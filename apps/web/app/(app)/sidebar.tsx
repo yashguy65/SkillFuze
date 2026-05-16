@@ -35,9 +35,17 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   return (
     <aside className="w-20 border-r border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-col items-center py-6 sticky top-0 h-screen z-40">
       {/* Logo / Brand mark */}
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center mb-8 shadow-lg shadow-blue-500/20 shrink-0">
-        <span className="text-white font-black text-sm">SF</span>
-      </div>
+      <Link href="/dashboard" className="mb-8 shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform hover:scale-110 active:scale-95 overflow-hidden">
+          <Image 
+            src="/favicon.png" 
+            alt="SkillFuze Logo" 
+            width={40} 
+            height={40} 
+            className="w-full h-full object-cover"
+          />
+        </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-2">
