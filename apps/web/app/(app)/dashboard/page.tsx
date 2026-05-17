@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { findMatches, MatchResult } from '@/lib/ai-service'
 import Link from 'next/link'
-import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap, Filter, MessageSquare } from 'lucide-react'
+import { Bell, Search, Sparkles, Loader2, AlertTriangle, RefreshCw, Users, Zap, Filter, MessageSquare, X } from 'lucide-react'
 import { useNotifications } from '../notifications-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,9 +41,12 @@ const PREFERENCES = [
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 /** Card used in the "Discover" tab */
-function DiscoverCard({ user }: { user: DiscoverUser }) {
+function DiscoverCard({ user, onClick }: { user: DiscoverUser; onClick: () => void }) {
   return (
-    <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
+    <div
+      onClick={onClick}
+      className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer"
+    >
       <div className="flex items-center gap-4 mb-4">
         <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-blue-400 group-hover:bg-blue-500/10 group-hover:text-blue-300 transition-colors border border-slate-700/50 overflow-hidden">
           {user.avatar && user.avatar.startsWith('http') ? (
@@ -58,7 +61,7 @@ function DiscoverCard({ user }: { user: DiscoverUser }) {
             @{user.username}
           </h3>
         </div>
-        <Link 
+        <Link
           href={`/messages?user_id=${user.id}`}
           onClick={(e) => e.stopPropagation()}
           className="p-2 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors self-start shrink-0"
@@ -81,8 +84,86 @@ function DiscoverCard({ user }: { user: DiscoverUser }) {
   )
 }
 
+/** Expanded modal overlay shown when a DiscoverCard is clicked */
+function UserModal({ user, onClose }: { user: DiscoverUser; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Avatar + name */}
+        <div className="flex items-center gap-5 mb-6">
+          <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-2xl font-bold text-blue-400 overflow-hidden shrink-0 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+            {user.avatar && user.avatar.startsWith('http') ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+            ) : (
+              user.username?.[0]?.toUpperCase() ?? 'U'
+            )}
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">@{user.username}</h2>
+            {user.preference && (
+              <span className="inline-flex items-center gap-1.5 mt-1 px-3 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-xs font-medium">
+                {user.preference}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Bio / Persona */}
+        {user.bio && (
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">About</p>
+            <p className="text-sm text-slate-300 leading-relaxed">{user.bio}</p>
+          </div>
+        )}
+
+        {/* Tags / Skills */}
+        {user.skills.length > 0 && (
+          <div className="mb-8">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Skills &amp; Tags</p>
+            <div className="flex flex-wrap gap-2">
+              {user.skills.map(skill => (
+                <span
+                  key={skill}
+                  className="px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-full border border-blue-500/20"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CTA */}
+        <Link
+          href={`/messages?user_id=${user.id}`}
+          onClick={onClose}
+          className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 hover:bg-blue-400 text-slate-950 font-semibold rounded-xl transition-colors shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+        >
+          <MessageSquare className="w-4 h-4" />
+          Send a message
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 /** Card used for real AI match results */
-function MatchCard({ match }: { match: MatchResult }) {
+function MatchCard({ match, onClick }: { match: MatchResult; onClick: () => void }) {
   const label = similarityLabel(match.similarity)
   const displayName = match.github_username || match.user_id.substring(0, 8)
   const avatarUrl = match.github_username
@@ -90,7 +171,10 @@ function MatchCard({ match }: { match: MatchResult }) {
     : null
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer">
+    <div
+      onClick={onClick}
+      className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:bg-slate-800 hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] group cursor-pointer"
+    >
       <div className="flex items-center gap-4 mb-4">
         <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-lg font-bold text-blue-400 group-hover:bg-blue-500/10 group-hover:text-blue-300 transition-colors border border-slate-700/50 overflow-hidden">
           {avatarUrl ? (
@@ -100,7 +184,6 @@ function MatchCard({ match }: { match: MatchResult }) {
               alt={displayName}
               className="w-full h-full object-cover"
               onError={(e) => {
-                // Fallback to initial letter if GitHub avatar fails
                 const el = e.currentTarget
                 el.style.display = 'none'
                 el.parentElement!.textContent = displayName[0]?.toUpperCase() ?? '?'
@@ -134,7 +217,7 @@ function MatchCard({ match }: { match: MatchResult }) {
             </span>
           </p>
         </div>
-        <Link 
+        <Link
           href={`/messages?user_id=${match.user_id}`}
           onClick={(e) => e.stopPropagation()}
           className="p-2 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors self-start shrink-0"
@@ -167,6 +250,104 @@ function MatchCard({ match }: { match: MatchResult }) {
   )
 }
 
+/** Expanded modal for AI match results */
+function MatchModal({ match, onClose }: { match: MatchResult; onClose: () => void }) {
+  const label = similarityLabel(match.similarity)
+  const displayName = match.github_username || match.user_id.substring(0, 8)
+  const avatarUrl = match.github_username
+    ? `https://github.com/${match.github_username}.png?size=96`
+    : null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Avatar + name + score */}
+        <div className="flex items-center gap-5 mb-6">
+          <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-2xl font-bold text-blue-400 overflow-hidden shrink-0 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const el = e.currentTarget
+                  el.style.display = 'none'
+                  el.parentElement!.textContent = displayName[0]?.toUpperCase() ?? '?'
+                }}
+              />
+            ) : (
+              displayName[0]?.toUpperCase() ?? '?'
+            )}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold text-white truncate">
+              {match.github_username ? (
+                <a
+                  href={`https://github.com/${match.github_username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-blue-400 transition-colors"
+                >
+                  @{displayName}
+                </a>
+              ) : (
+                `@${displayName}`
+              )}
+            </h2>
+            <p className={`text-sm font-medium ${label.color} flex items-center gap-1.5 mt-1`}>
+              <Zap className="w-3.5 h-3.5" />
+              {label.text}
+              <span className="ml-1 text-slate-500 font-normal">{Math.round(match.similarity * 100)}% match</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Skills / Tags */}
+        {match.skills.length > 0 && (
+          <div className="mb-8">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Skills &amp; Tags</p>
+            <div className="flex flex-wrap gap-2">
+              {match.skills.map(skill => (
+                <span
+                  key={skill}
+                  className="px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-full border border-blue-500/20"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CTA */}
+        <Link
+          href={`/messages?user_id=${match.user_id}`}
+          onClick={onClose}
+          className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 hover:bg-blue-400 text-slate-950 font-semibold rounded-xl transition-colors shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+        >
+          <MessageSquare className="w-4 h-4" />
+          Send a message
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -184,6 +365,8 @@ export default function Dashboard() {
   const [selectedPreferences, setSelectedPreferences] = useState<string[]>([])
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [isActivityOpen, setIsActivityOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<DiscoverUser | null>(null)
+  const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null)
 
   useEffect(() => {
     // Fetch auth
@@ -230,6 +413,10 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
+      {/* User detail modal */}
+      {selectedUser && <UserModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
+      {/* Match detail modal */}
+      {selectedMatch && <MatchModal match={selectedMatch} onClose={() => setSelectedMatch(null)} />}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* ── Top Bar ─────────────────────────────────────────────────────── */}
@@ -430,12 +617,14 @@ export default function Dashboard() {
                           return (
                             <div key={pref}>
                             <h2 className="text-xl font-bold text-slate-200 mb-4 pl-2 border-l-4 border-blue-500">{pref}</h2>
-                            <div className="flex overflow-x-auto pb-6 gap-6 snap-x -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
+                            <div className="flex overflow-x-auto overflow-y-hidden pb-4 gap-6 snap-x [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                               {users.map(u => (
                                 <div key={u.id} className="min-w-[300px] max-w-[320px] snap-start flex-none">
-                                  <DiscoverCard user={u} />
+                                  <DiscoverCard user={u} onClick={() => setSelectedUser(u)} />
                                 </div>
                               ))}
+                              {/* Spacer so last card isn't clipped by overflow-x-hidden */}
+                              <div className="shrink-0 w-2" />
                             </div>
                           </div>
                         )
@@ -512,7 +701,7 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                           {matchedResults.map((match) => (
-                            <MatchCard key={match.user_id} match={match} />
+                            <MatchCard key={match.user_id} match={match} onClick={() => setSelectedMatch(match)} />
                           ))}
                         </div>
                       </>

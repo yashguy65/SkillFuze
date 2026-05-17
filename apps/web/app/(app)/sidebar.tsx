@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, User, Settings, LogOut, MessageSquare, Bell } from 'lucide-react'
+import { Home, User, Settings, LogOut, MessageSquare } from 'lucide-react'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from './notifications-context'
@@ -17,7 +17,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const { totalUnread, pushEnabled, pushSupported, requestPush } = useNotifications()
+  const { totalUnread } = useNotifications()
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -29,7 +29,6 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
     { icon: Home, label: 'Home', href: '/dashboard' },
     { icon: User, label: 'Profile', href: '/profile' },
     { icon: MessageSquare, label: 'Chat', href: '/messages', badge: totalUnread },
-    { icon: Settings, label: 'Settings', href: '/settings' },
   ]
 
   return (
@@ -37,11 +36,11 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
       {/* Logo / Brand mark */}
       <Link href="/dashboard" className="mb-8 shrink-0">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform hover:scale-110 active:scale-95 overflow-hidden">
-          <Image 
-            src="/favicon.png" 
-            alt="SkillFuze Logo" 
-            width={40} 
-            height={40} 
+          <Image
+            src="/favicon.png"
+            alt="SkillFuze Logo"
+            width={40}
+            height={40}
             className="w-full h-full object-cover"
           />
         </div>
@@ -55,11 +54,10 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
             <Link
               key={item.label}
               href={item.href}
-              className={`p-3 rounded-xl transition-all group relative ${
-                isActive
-                  ? 'bg-blue-500/10 text-blue-400'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
+              className={`p-3 rounded-xl transition-all group relative ${isActive
+                ? 'bg-blue-500/10 text-blue-400'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
               title={item.label}
             >
               <item.icon className="w-6 h-6" />
@@ -81,29 +79,8 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
             </Link>
           )
         })}
-
-        {/* Push notification toggle */}
-        {pushSupported && (
-          <button
-            onClick={requestPush}
-            disabled={pushEnabled}
-            className={`p-3 rounded-xl transition-all group relative ${
-              pushEnabled
-                ? 'text-teal-400 bg-teal-500/10 cursor-default'
-                : 'text-slate-500 hover:bg-slate-800 hover:text-white'
-            }`}
-            title={pushEnabled ? 'Push notifications on' : 'Enable push notifications'}
-          >
-            <Bell className="w-6 h-6" />
-            {pushEnabled && (
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-teal-400 rounded-full border-2 border-slate-950" />
-            )}
-            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
-              {pushEnabled ? 'Notifications on ✓' : 'Enable notifications'}
-            </span>
-          </button>
-        )}
       </nav>
+
 
       {/* User menu */}
       <div className="relative">
@@ -113,6 +90,14 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
               <p className="text-xs font-semibold text-slate-400">Signed in as</p>
               <p className="text-sm font-bold truncate">{username}</p>
             </div>
+            <Link
+              href="/settings"
+              onClick={() => setDropdownOpen(false)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
