@@ -27,9 +27,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <NotificationsProvider>
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex selection:bg-teal-500/30 font-sans">
+      <div className="h-screen overflow-hidden bg-slate-950 text-slate-50 flex selection:bg-teal-500/30 font-sans">
         <AppSidebar username={username} avatarUrl={avatarUrl} />
-        <main className="flex-1 overflow-x-hidden">{children}</main>
+        <main className="flex-1 h-full overflow-hidden">{children}</main>
       </div>
     </NotificationsProvider>
   )

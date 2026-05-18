@@ -399,12 +399,17 @@ function MessagesContent() {
   }, [markDirectRead, markGroupRead, supabase])
 
   useEffect(() => {
+    // Guard against React Strict Mode's double-invocation: the cleanup sets
+    // `cancelled = true` synchronously, so the second async initData() call
+    // detects it after every await and exits before touching any channels.
+    let cancelled = false
+
     const initData = async () => {
       try {
         setIsLoading(true)
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          window.location.href = '/login'
+        if (cancelled || !user) {
+          if (!user) window.location.href = '/login'
           return
         }
 
@@ -413,12 +418,12 @@ function MessagesContent() {
         currentUserIdRef.current = myId
 
         await loadChats(myId)
+        if (cancelled) return
 
-        const presenceChannel = supabase.channel('online-users', {
-          config: { presence: { key: myId } }
-        })
-
-        presenceChannel
+        const presenceChannel = supabase
+          .channel(`online-users:${myId}`, {
+            config: { presence: { key: myId } }
+          })
           .on('presence', { event: 'sync' }, () => {
             const state = presenceChannel.presenceState()
             setOnlineUsers(new Set<string>(Object.keys(state)))
@@ -551,15 +556,22 @@ function MessagesContent() {
       } catch (err) {
         console.error('Failed to init messages', err)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     void initData()
 
     return () => {
-      if (chatChannelRef.current) supabase.removeChannel(chatChannelRef.current)
-      if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current)
+      cancelled = true
+      if (chatChannelRef.current) {
+        void supabase.removeChannel(chatChannelRef.current)
+        chatChannelRef.current = null
+      }
+      if (presenceChannelRef.current) {
+        void supabase.removeChannel(presenceChannelRef.current)
+        presenceChannelRef.current = null
+      }
     }
   }, [loadChats, markDirectRead, markGroupRead, refreshUnreadCount, supabase])
 
