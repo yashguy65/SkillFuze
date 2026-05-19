@@ -55,7 +55,7 @@ export default function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="h-full flex items-center justify-center bg-slate-950">
         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
       </div>
     )
@@ -192,7 +192,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen p-8 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 overflow-y-auto pb-24">
+    <div className="h-full p-8 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 overflow-y-auto pb-24">
       <div className="max-w-2xl mx-auto space-y-8">
         
         <div>
