@@ -32,10 +32,10 @@ interface DiscoverUser {
 }
 
 const PREFERENCES = [
+  'Just exploring',
   'Looking for a co-founder',
   'Looking for a teammate',
-  'Open to collaborate',
-  'Just exploring'
+  'Open to collaborate'
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -163,12 +163,18 @@ function UserModal({ user, onClose }: { user: DiscoverUser; onClose: () => void 
 }
 
 /** Card used for real AI match results */
-function MatchCard({ match, onClick }: { match: MatchResult; onClick: () => void }) {
+function MatchCard({ match, discoverUsers, onClick }: { match: MatchResult; discoverUsers: DiscoverUser[]; onClick: () => void }) {
   const label = similarityLabel(match.similarity)
-  const displayName = match.github_username || match.user_id.substring(0, 8)
-  const avatarUrl = match.github_username
-    ? `https://github.com/${match.github_username}.png?size=96`
-    : null
+
+  const matchedUser = discoverUsers.find(u => u.id === match.user_id)
+
+  // If github_username is a UUID, it means it's a fallback to the user_id (since python ai-service returns github_username = username_map.get(uid, uid))
+  const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
+  const rawGithubUsername = match.github_username && !isUuid(match.github_username) ? match.github_username : null
+  const displayName = matchedUser?.username || rawGithubUsername || match.user_id.substring(0, 8)
+
+  const avatarUrl = matchedUser?.avatar || (rawGithubUsername ? `https://github.com/${rawGithubUsername}.png?size=96` : null)
 
   return (
     <div
@@ -195,9 +201,9 @@ function MatchCard({ match, onClick }: { match: MatchResult; onClick: () => void
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors truncate">
-            {match.github_username ? (
+            {rawGithubUsername ? (
               <a
-                href={`https://github.com/${match.github_username}`}
+                href={`https://github.com/${rawGithubUsername}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:underline"
@@ -251,12 +257,18 @@ function MatchCard({ match, onClick }: { match: MatchResult; onClick: () => void
 }
 
 /** Expanded modal for AI match results */
-function MatchModal({ match, onClose }: { match: MatchResult; onClose: () => void }) {
+function MatchModal({ match, discoverUsers, onClose }: { match: MatchResult; discoverUsers: DiscoverUser[]; onClose: () => void }) {
   const label = similarityLabel(match.similarity)
-  const displayName = match.github_username || match.user_id.substring(0, 8)
-  const avatarUrl = match.github_username
-    ? `https://github.com/${match.github_username}.png?size=96`
-    : null
+
+  const matchedUser = discoverUsers.find(u => u.id === match.user_id)
+
+  // If github_username is a UUID, it means it's a fallback to the user_id (since python ai-service returns github_username = username_map.get(uid, uid))
+  const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
+  const rawGithubUsername = match.github_username && !isUuid(match.github_username) ? match.github_username : null
+  const displayName = matchedUser?.username || rawGithubUsername || match.user_id.substring(0, 8)
+
+  const avatarUrl = matchedUser?.avatar || (rawGithubUsername ? `https://github.com/${rawGithubUsername}.png?size=96` : null)
 
   return (
     <div
@@ -296,9 +308,9 @@ function MatchModal({ match, onClose }: { match: MatchResult; onClose: () => voi
           </div>
           <div className="min-w-0">
             <h2 className="text-2xl font-bold text-white truncate">
-              {match.github_username ? (
+              {rawGithubUsername ? (
                 <a
-                  href={`https://github.com/${match.github_username}`}
+                  href={`https://github.com/${rawGithubUsername}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-blue-400 transition-colors"
@@ -416,7 +428,7 @@ export default function Dashboard() {
       {/* User detail modal */}
       {selectedUser && <UserModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
       {/* Match detail modal */}
-      {selectedMatch && <MatchModal match={selectedMatch} onClose={() => setSelectedMatch(null)} />}
+      {selectedMatch && <MatchModal match={selectedMatch} discoverUsers={discoverUsers} onClose={() => setSelectedMatch(null)} />}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* ── Top Bar ─────────────────────────────────────────────────────── */}
@@ -487,8 +499,8 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-6xl mx-auto">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 w-full min-w-0 overflow-x-hidden">
+          <div className="max-w-6xl mx-auto w-full min-w-0">
 
             {/* ── AI Search + Find Matches CTA ──────────────────────────── */}
             <div className={`relative mb-8 mx-auto group mt-4 transition-all duration-500 ease-in-out ${isSearchFocused || searchQuery.length > 0 ? 'max-w-4xl' : 'max-w-2xl'}`}>
@@ -538,10 +550,10 @@ export default function Dashboard() {
             </div>
 
             {/* ── Main Content ─────────────────────────────────────────── */}
-            <div className="flex flex-col lg:flex-row gap-8">
+            <div className="flex flex-col lg:flex-row gap-8 w-full min-w-0">
 
               {/* ── User Grid ──────────────────────────────────────────── */}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
 
                 {/* DISCOVER TAB */}
                 {activeTab === 'discover' && (
@@ -550,11 +562,10 @@ export default function Dashboard() {
                       <div className="mb-8">
                         <button
                           onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                            isFiltersOpen || selectedPreferences.length > 0
-                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-300'
-                          }`}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${isFiltersOpen || selectedPreferences.length > 0
+                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-300'
+                            }`}
                         >
                           <Filter className="w-4 h-4" />
                           Filters {selectedPreferences.length > 0 && `(${selectedPreferences.length})`}
@@ -574,18 +585,17 @@ export default function Dashboard() {
                                         prev.includes(pref) ? prev.filter(p => p !== pref) : [...prev, pref]
                                       )
                                     }}
-                                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                                      isSelected
-                                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/50'
-                                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-300'
-                                    }`}
+                                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${isSelected
+                                      ? 'bg-blue-500/20 text-blue-400 border-blue-500/50'
+                                      : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-300'
+                                      }`}
                                   >
                                     {pref}
                                   </button>
                                 )
                               })}
                               {selectedPreferences.length > 0 && (
-                                <button 
+                                <button
                                   onClick={() => setSelectedPreferences([])}
                                   className="px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors ml-2"
                                 >
@@ -615,21 +625,17 @@ export default function Dashboard() {
                           if (users.length === 0) return null
 
                           return (
-                            <div key={pref}>
-                            <h2 className="text-xl font-bold text-slate-200 mb-4 pl-2 border-l-4 border-blue-500">{pref}</h2>
-                            <div className="flex overflow-x-auto overflow-y-hidden pb-4 gap-6 snap-x [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                              {users.map(u => (
-                                <div key={u.id} className="min-w-[300px] max-w-[320px] snap-start flex-none">
-                                  <DiscoverCard user={u} onClick={() => setSelectedUser(u)} />
-                                </div>
-                              ))}
-                              {/* Spacer so last card isn't clipped by overflow-x-hidden */}
-                              <div className="shrink-0 w-2" />
+                            <div key={pref} className="mb-10">
+                              <h2 className="text-xl font-bold text-slate-200 mb-6 pl-2 border-l-4 border-blue-500">{pref}</h2>
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                {users.map(u => (
+                                  <DiscoverCard key={u.id} user={u} onClick={() => setSelectedUser(u)} />
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })
-                    )}
+                          )
+                        })
+                      )}
                     </div>
                   </div>
                 )}
@@ -701,7 +707,7 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                           {matchedResults.map((match) => (
-                            <MatchCard key={match.user_id} match={match} onClick={() => setSelectedMatch(match)} />
+                            <MatchCard key={match.user_id} match={match} discoverUsers={discoverUsers} onClick={() => setSelectedMatch(match)} />
                           ))}
                         </div>
                       </>

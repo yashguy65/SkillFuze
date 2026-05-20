@@ -25,7 +25,7 @@ export default function UserDropdown({ user }: { user: User }) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={user?.user_metadata?.avatar_url || 'https://github.com/identicons/default.png'}
+          src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.picture_url || 'https://github.com/identicons/default.png'}
           alt="Avatar"
           className="w-8 h-8 rounded-full bg-gray-700 object-cover"
         />

@@ -18,8 +18,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       } else if (user?.email) {
         setUsername(user.email.split('@')[0])
       }
-      if (user?.user_metadata?.avatar_url) {
-        setAvatarUrl(user.user_metadata.avatar_url)
+      const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.picture_url
+      if (avatar) {
+        setAvatarUrl(avatar)
       }
     }
     fetchUser()

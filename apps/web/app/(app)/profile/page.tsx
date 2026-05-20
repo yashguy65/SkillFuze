@@ -25,6 +25,12 @@ export default function ProfilePage() {
   const [editSummary, setEditSummary] = useState('')
   const [isSavingPersona, setIsSavingPersona] = useState(false)
 
+  // Bio State
+  const [bio, setBio] = useState<string>('')
+  const [isEditingBio, setIsEditingBio] = useState(false)
+  const [editBioVal, setEditBioVal] = useState('')
+  const [isSavingBio, setIsSavingBio] = useState(false)
+
   // Custom Tags State
   const [customTags, setCustomTags] = useState<string[]>([])
   const [isAddingTag, setIsAddingTag] = useState(false)
@@ -56,6 +62,9 @@ export default function ProfilePage() {
         }
         if (user.user_metadata?.preference) {
           setPreference(user.user_metadata.preference)
+        }
+        if (user.user_metadata?.bio) {
+          setBio(user.user_metadata.bio)
         }
 
         getPersona({ user_id: user.id })
@@ -197,6 +206,23 @@ export default function ProfilePage() {
     setIsSavingPersona(false)
   }
 
+  const handleSaveBio = async () => {
+    if (!user) return
+    setIsSavingBio(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        bio: editBioVal
+      }
+    })
+    
+    if (!error) {
+      setBio(editBioVal)
+      setIsEditingBio(false)
+    }
+    setIsSavingBio(false)
+  }
+
   return (
     <div className="h-screen flex overflow-hidden bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       <main className="flex flex-col md:flex-row w-full h-full overflow-hidden">
@@ -308,6 +334,62 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Bio Section ───────────────────────────────────── */}
+          <div className="w-full mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider ml-1">
+                Bio
+              </h2>
+              {!isEditingBio && (
+                <button
+                  onClick={() => {
+                    setEditBioVal(bio)
+                    setIsEditingBio(true)
+                  }}
+                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {isEditingBio ? (
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
+                <div>
+                  <textarea
+                    value={editBioVal}
+                    onChange={e => setEditBioVal(e.target.value)}
+                    rows={4}
+                    placeholder="Tell us about yourself, your interests, and what you are building..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500/50 transition-colors resize-none font-sans"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => setIsEditingBio(false)}
+                    className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveBio}
+                    disabled={isSavingBio}
+                    className="px-4 py-1.5 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 disabled:opacity-50 border border-blue-500/20"
+                  >
+                    {isSavingBio && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 shadow-sm">
+                <p className="text-sm text-slate-300 leading-relaxed font-light">
+                  {bio || "Add a bio to introduce yourself to the community."}
+                </p>
               </div>
             )}
           </div>

@@ -47,9 +47,9 @@ export async function GET() {
       return {
         id: u.id, // Using string id instead of number now
         username: u.user_metadata?.user_name || u.email?.split('@')[0] || 'user',
-        bio: u.user_metadata?.bio || 'Exploring new opportunities and building awesome projects.',
+        bio: u.user_metadata?.bio || '',
         skills: finalSkills,
-        avatar: u.user_metadata?.avatar_url || '',
+        avatar: u.user_metadata?.avatar_url || u.user_metadata?.picture || u.user_metadata?.picture_url || '',
         preference: u.user_metadata?.preference || 'Just exploring'
       }
     })
