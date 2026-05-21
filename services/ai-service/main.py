@@ -43,5 +43,6 @@ app.include_router(linkedin.router, prefix="/api/v1", tags=["LinkedIn"])
 app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
 
 @app.get("/health")
+@app.head("/health")
 def health_check():
-    return {"status": "ok", "service": "ai-service"}
+    return {"status":"OK"}
