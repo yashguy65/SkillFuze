@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Send, Search, Check, CheckCheck, MessageSquare, Users, Plus, X } from 'lucide-react'
+import { Send, Search, Check, CheckCheck, MessageSquare, Users, X } from 'lucide-react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '../notifications-context'
@@ -39,6 +39,8 @@ type Chat = {
   memberIds?: string[]
   memberNames?: string[]
   lastReadAt?: string | null
+  isOwner?: boolean
+  ownerId?: string
 }
 
 type DiscoverUser = {
@@ -170,7 +172,9 @@ function createGroupChat(
     messages: [],
     memberIds,
     memberNames,
-    lastReadAt: myMembership.last_read_at ?? myMembership.joined_at ?? null
+    lastReadAt: myMembership.last_read_at ?? myMembership.joined_at ?? null,
+    isOwner: myMembership.role === 'owner',
+    ownerId: group.created_by
   }
 }
 
@@ -192,9 +196,11 @@ function MessagesContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
+  const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false)
   const [groupName, setGroupName] = useState('')
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false)
   const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -209,6 +215,20 @@ function MessagesContent() {
   const groupIdsRef = useRef<Set<string>>(new Set())
   const chatsRef = useRef<Chat[]>([])
   const pendingUpdatesRef = useRef<Map<string, DbMessage>>(new Map())
+
+  const chatPartners = useMemo(() => {
+    const directChatUserIds = new Set(
+      chats
+        .filter((c) => c.kind === 'direct' && c.userId)
+        .map((c) => c.userId as string)
+    )
+    return discoverUsers.filter((u) => directChatUserIds.has(u.id))
+  }, [chats, discoverUsers])
+
+  const userProfilesMap = useMemo(() => {
+    return new Map(discoverUsers.map((u) => [u.id, u]))
+  }, [discoverUsers])
+
 
   useEffect(() => {
     chatsRef.current = chats
@@ -252,6 +272,7 @@ function MessagesContent() {
 
   const selectChat = useCallback((chat: Chat, shouldMarkRead = true) => {
     setSelectedChatId(chat.id)
+    setIsParticipantsModalOpen(false)
     if (!shouldMarkRead) return
 
     if (chat.kind === 'direct' && chat.userId) {
@@ -264,6 +285,7 @@ function MessagesContent() {
   const selectDirectChatByUserId = useCallback((userId: string, shouldMarkRead = true) => {
     const targetChatId = `direct_${userId}`
     setSelectedChatId(targetChatId)
+    setIsParticipantsModalOpen(false)
 
     setChats((prev) => {
       const existing = prev.find((chat) => chat.id === targetChatId)
@@ -491,12 +513,12 @@ function MessagesContent() {
               const messages = chat.messages.map((msg) => (
                 msg.id === updatedMsg.id
                   ? {
-                      ...msg,
-                      text: updatedMsg.text,
-                      status: updatedMsg.status ?? msg.status,
-                      created_at: updatedMsg.created_at,
-                      timestamp: formatMessageTime(updatedMsg.created_at)
-                    }
+                    ...msg,
+                    text: updatedMsg.text,
+                    status: updatedMsg.status ?? msg.status,
+                    created_at: updatedMsg.created_at,
+                    timestamp: formatMessageTime(updatedMsg.created_at)
+                  }
                   : msg
               ))
 
@@ -581,6 +603,8 @@ function MessagesContent() {
     const t = setTimeout(() => selectDirectChatByUserId(initialUserId), 0)
     return () => clearTimeout(t)
   }, [initialUserId, isLoading, selectDirectChatByUserId])
+
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -758,6 +782,38 @@ function MessagesContent() {
     setIsCreatingGroup(false)
   }
 
+  const handleDeleteGroup = async () => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || isDeletingGroup) return
+
+    if (!confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
+      return
+    }
+
+    setIsDeletingGroup(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('chat_groups')
+        .delete()
+        .eq('id', selectedChat.groupId)
+        .select()
+
+      if (error || !data || data.length === 0) {
+        console.error('Error deleting group:', error)
+        alert('Failed to delete group. Please make sure you are the group owner and that you have run the RLS DELETE policy in your Supabase SQL Editor.')
+        return
+      }
+
+      setChats((prev) => prev.filter((c) => c.groupId !== selectedChat.groupId))
+      setSelectedChatId(null)
+      setIsParticipantsModalOpen(false)
+    } catch (err) {
+      console.error('Failed to delete group:', err)
+    } finally {
+      setIsDeletingGroup(false)
+    }
+  }
+
   const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
     || chat.memberNames?.some((memberName) => memberName.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -784,7 +840,7 @@ function MessagesContent() {
               aria-label="Create group chat"
               title="Create group chat"
             >
-              <Plus className="w-4 h-4" />
+              <Users className="w-5 h-5" />
             </button>
           </div>
           <div className="relative">
@@ -860,12 +916,20 @@ function MessagesContent() {
                 )}
               </div>
               <div className="min-w-0">
-                <h3 className="font-medium text-white truncate">{selectedChat.name}</h3>
-                <p className="text-xs text-slate-400 truncate">
-                  {selectedChat.kind === 'group'
-                    ? `${selectedChat.memberIds?.length || 0} members`
-                    : selectedChat.userId && onlineUsers.has(selectedChat.userId) ? 'Online' : 'Offline'}
-                </p>
+                {selectedChat.kind === 'group' ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsParticipantsModalOpen(true)}
+                    className="font-medium text-white hover:text-blue-400 transition-colors text-left flex flex-col cursor-pointer"
+                  >
+                    <span className="truncate">{selectedChat.name}</span>
+                    <span className="text-xs text-slate-500 font-normal hover:underline">
+                      {selectedChat.memberIds?.length || 0} members • View participants
+                    </span>
+                  </button>
+                ) : (
+                  <h3 className="font-medium text-white truncate">{selectedChat.name}</h3>
+                )}
               </div>
             </div>
           </div>
@@ -895,7 +959,7 @@ function MessagesContent() {
                       <span>{msg.timestamp}</span>
                       {isMe && selectedChat.kind === 'direct' && (
                         msg.status === 'read' ? <CheckCheck className="w-3 h-3 text-blue-400" /> :
-                        <Check className="w-3 h-3" />
+                          <Check className="w-3 h-3" />
                       )}
                     </div>
                   </div>
@@ -965,23 +1029,33 @@ function MessagesContent() {
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
               />
               <div className="max-h-72 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
-                {discoverUsers.map((user) => {
-                  const isSelected = selectedMemberIds.has(user.id)
-                  return (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => toggleMember(user.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-blue-500/10 border border-blue-500/30' : 'border border-transparent hover:bg-slate-800/70'}`}
-                    >
-                      <Image src={user.avatar || avatarForName(user.username)} alt={user.username} width={36} height={36} className="w-9 h-9 rounded-full object-cover border border-slate-700" unoptimized />
-                      <span className="flex-1 text-sm text-slate-200 truncate">{user.username}</span>
-                      <span className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-500' : 'border-slate-600'}`}>
-                        {isSelected && <Check className="w-3 h-3 text-white" />}
-                      </span>
-                    </button>
-                  )
-                })}
+                {chatPartners.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center text-slate-500">
+                    <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
+                    <p className="text-sm font-medium text-slate-400">No active chats found</p>
+                    <p className="text-xs mt-1 max-w-[240px]">
+                      You can only add users to a group chat if you have an existing direct conversation with them.
+                    </p>
+                  </div>
+                ) : (
+                  chatPartners.map((user) => {
+                    const isSelected = selectedMemberIds.has(user.id)
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => toggleMember(user.id)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-blue-500/10 border border-blue-500/30' : 'border border-transparent hover:bg-slate-800/70'}`}
+                      >
+                        <Image src={user.avatar || avatarForName(user.username)} alt={user.username} width={36} height={36} className="w-9 h-9 rounded-full object-cover border border-slate-700" unoptimized />
+                        <span className="flex-1 text-sm text-slate-200 truncate">{user.username}</span>
+                        <span className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-500' : 'border-slate-600'}`}>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </span>
+                      </button>
+                    )
+                  })
+                )}
               </div>
               <button
                 type="button"
@@ -992,6 +1066,83 @@ function MessagesContent() {
                 {isCreatingGroup ? 'Creating...' : 'Create group'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isParticipantsModalOpen && selectedChat && selectedChat.kind === 'group' && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-white font-semibold">Group participants</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {selectedChat.memberIds?.length || 0} members
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsParticipantsModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="max-h-80 overflow-y-auto space-y-2 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                {selectedChat.memberIds?.map((memberId) => {
+                  const profile = userProfilesMap.get(memberId)
+                  const name = profile?.username || `User ${memberId.substring(0, 8)}`
+
+                  return (
+                    <div
+                      key={memberId}
+                      className="flex items-center justify-between p-3 rounded-lg border border-slate-800/40 bg-slate-950/20"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Image
+                          src={profile?.avatar || avatarForName(name)}
+                          alt={name}
+                          width={36}
+                          height={36}
+                          className="w-9 h-9 rounded-full object-cover border border-slate-700 shrink-0"
+                          unoptimized
+                        />
+                        <span className="text-sm font-medium text-slate-200 truncate">
+                          {name}
+                        </span>
+                      </div>
+                      {memberId === selectedChat.ownerId && (
+                        <span className="text-[11px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-wider shrink-0">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {selectedChat.isOwner && (
+              <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+                <button
+                  type="button"
+                  onClick={handleDeleteGroup}
+                  disabled={isDeletingGroup}
+                  className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 animate-fade-in"
+                >
+                  {isDeletingGroup ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                      Deleting group...
+                    </>
+                  ) : (
+                    'Delete Group'
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

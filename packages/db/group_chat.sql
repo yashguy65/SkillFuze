@@ -103,6 +103,11 @@ with check (
   )
 );
 
+drop policy if exists "Group owners can delete groups" on public.chat_groups;
+create policy "Group owners can delete groups"
+on public.chat_groups for delete
+using (created_by = auth.uid());
+
 drop policy if exists "Group members can read memberships" on public.chat_group_members;
 create policy "Group members can read memberships"
 on public.chat_group_members for select
