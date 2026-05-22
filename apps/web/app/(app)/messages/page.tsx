@@ -88,6 +88,29 @@ function formatMessageTime(createdAt: string) {
   return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatDividerDate(dateStr: string) {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ''
+
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+
+  if (isSameDay(date, today)) {
+    return 'Today'
+  }
+  if (isSameDay(date, yesterday)) {
+    return 'Yesterday'
+  }
+
+  return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
 function userName(userId: string, profiles: Map<string, DiscoverUser>) {
   return profiles.get(userId)?.username || `User ${userId.substring(0, 8)}`
 }
@@ -202,6 +225,7 @@ function MessagesContent() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
   const [isDeletingGroup, setIsDeletingGroup] = useState(false)
   const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
+  const [allUsers, setAllUsers] = useState<DiscoverUser[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
@@ -226,8 +250,8 @@ function MessagesContent() {
   }, [chats, discoverUsers])
 
   const userProfilesMap = useMemo(() => {
-    return new Map(discoverUsers.map((u) => [u.id, u]))
-  }, [discoverUsers])
+    return new Map(allUsers.map((u) => [u.id, u]))
+  }, [allUsers])
 
 
   useEffect(() => {
@@ -303,6 +327,7 @@ function MessagesContent() {
     const discoverData = await res.json()
     const users: DiscoverUser[] = discoverData.users || []
     chatProfilesRef.current = new Map(users.map((discoverUser) => [discoverUser.id, discoverUser]))
+    setAllUsers(users)
     setDiscoverUsers(users.filter((u) => u.id !== myId))
 
     const directChatMap = new Map<string, Chat>()
@@ -814,6 +839,43 @@ function MessagesContent() {
     }
   }
 
+  const handleMakeAdmin = async (newAdminId: string) => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId) return
+
+    const newAdminName = userName(newAdminId, chatProfilesRef.current)
+    if (!confirm(`Are you sure you want to make ${newAdminName} the admin of this group? You will lose admin rights.`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.rpc('transfer_group_ownership', {
+        p_group_id: selectedChat.groupId,
+        p_new_owner_id: newAdminId
+      })
+
+      if (error) {
+        console.error('Error transferring admin rights:', error)
+        alert(`Failed to transfer admin rights: ${error.message}`)
+        return
+      }
+
+      // Update local chats state to reflect new admin/ownership
+      setChats((prevChats) => prevChats.map((chat) => {
+        if (chat.groupId !== selectedChat.groupId) return chat
+        return {
+          ...chat,
+          isOwner: false, // previous admin loses rights
+          ownerId: newAdminId // new admin takes ownership
+        }
+      }))
+
+      alert(`${newAdminName} is now the group admin.`)
+      setIsParticipantsModalOpen(false)
+    } catch (err) {
+      console.error('Failed to transfer admin rights:', err)
+    }
+  }
+
   const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
     || chat.memberNames?.some((memberName) => memberName.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -940,31 +1002,48 @@ function MessagesContent() {
                 <p>Start the conversation with {selectedChat.name}</p>
               </div>
             ) : (
-              selectedChat.messages.map((msg) => {
-                const isMe = msg.senderId === currentUserId
-                return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    {selectedChat.kind === 'group' && !isMe && (
-                      <span className="text-xs text-slate-500 mb-1 px-1">{msg.senderName}</span>
-                    )}
-                    <div
-                      className={`max-w-[70%] px-4 py-2 rounded-2xl ${isMe
-                        ? 'bg-blue-600 text-white rounded-br-sm'
-                        : 'bg-slate-800 text-slate-200 rounded-bl-sm'
-                        }`}
-                    >
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
-                      <span>{msg.timestamp}</span>
-                      {isMe && selectedChat.kind === 'direct' && (
-                        msg.status === 'read' ? <CheckCheck className="w-3 h-3 text-blue-400" /> :
-                          <Check className="w-3 h-3" />
+              (() => {
+                let lastDate = ''
+                return selectedChat.messages.map((msg) => {
+                  const isMe = msg.senderId === currentUserId
+                  const msgDate = formatDividerDate(msg.created_at)
+                  const showDivider = msgDate && msgDate !== lastDate
+                  if (showDivider) {
+                    lastDate = msgDate
+                  }
+                  return (
+                    <div key={msg.id} className="flex flex-col w-full">
+                      {showDivider && (
+                        <div className="flex justify-center my-4 select-none w-full">
+                          <span className="bg-slate-900/60 backdrop-blur-md text-slate-400 text-xs px-3.5 py-1.5 rounded-full border border-slate-800/80 shadow-md font-medium tracking-wide">
+                            {msgDate}
+                          </span>
+                        </div>
                       )}
+                      <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                        {selectedChat.kind === 'group' && !isMe && (
+                          <span className="text-xs text-slate-500 mb-1 px-1">{msg.senderName}</span>
+                        )}
+                        <div
+                          className={`max-w-[70%] px-4 py-2 rounded-2xl ${isMe
+                            ? 'bg-blue-600 text-white rounded-br-sm'
+                            : 'bg-slate-800 text-slate-200 rounded-bl-sm'
+                            }`}
+                        >
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                          <span>{msg.timestamp}</span>
+                          {isMe && selectedChat.kind === 'direct' && (
+                            msg.status === 'read' ? <CheckCheck className="w-3 h-3 text-blue-400" /> :
+                              <Check className="w-3 h-3" />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )
-              })
+                  )
+                })
+              })()
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -1113,10 +1192,20 @@ function MessagesContent() {
                           {name}
                         </span>
                       </div>
-                      {memberId === selectedChat.ownerId && (
+                      {memberId === selectedChat.ownerId ? (
                         <span className="text-[11px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-wider shrink-0">
                           Admin
                         </span>
+                      ) : (
+                        selectedChat.isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => void handleMakeAdmin(memberId)}
+                            className="text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-600 transition-colors shrink-0 cursor-pointer"
+                          >
+                            Make Admin
+                          </button>
+                        )
                       )}
                     </div>
                   )

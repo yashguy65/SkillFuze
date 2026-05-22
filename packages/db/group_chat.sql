@@ -166,6 +166,65 @@ $$;
 grant execute on function public.mark_direct_messages_read(uuid) to authenticated;
 
 
+create or replace function public.transfer_group_ownership(
+  p_group_id uuid,
+  p_new_owner_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current_owner_id uuid;
+begin
+  -- 1. Get the current owner of the group and verify authorization
+  select created_by into v_current_owner_id
+  from public.chat_groups
+  where id = p_group_id;
+
+  if v_current_owner_id is null then
+    raise exception 'Group not found';
+  end if;
+
+  if v_current_owner_id != auth.uid() then
+    raise exception 'Unauthorized: Only the group owner/admin can transfer ownership';
+  end if;
+
+  -- Verify the new owner is a member of the group
+  if not exists (
+    select 1 from public.chat_group_members
+    where group_id = p_group_id and user_id = p_new_owner_id
+  ) then
+    raise exception 'The new owner must be a member of the group';
+  end if;
+
+  -- Prevent transferring to oneself
+  if p_new_owner_id = auth.uid() then
+    return;
+  end if;
+
+  -- 2. Update the role of the new owner to 'owner'
+  update public.chat_group_members
+  set role = 'owner'
+  where group_id = p_group_id and user_id = p_new_owner_id;
+
+  -- 3. Update the role of the old owner to 'member'
+  update public.chat_group_members
+  set role = 'member'
+  where group_id = p_group_id and user_id = auth.uid();
+
+  -- 4. Update the created_by field in chat_groups
+  update public.chat_groups
+  set created_by = p_new_owner_id
+  where id = p_group_id;
+
+end;
+$$;
+
+grant execute on function public.transfer_group_ownership(uuid, uuid) to authenticated;
+
+
 drop policy if exists "Group members can read messages" on public.chat_group_messages;
 create policy "Group members can read messages"
 on public.chat_group_messages for select
