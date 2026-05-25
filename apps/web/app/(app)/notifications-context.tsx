@@ -39,10 +39,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray
 }
 
-function isMissingTableError(error: { code?: string } | null) {
-  return error?.code === '42P01' || error?.code === '42703'
-}
-
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const [totalUnread, setTotalUnread] = useState(0)
@@ -50,7 +46,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [pushSupported, setPushSupported] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
 
   const ensureCurrentUserId = useCallback(async () => {
@@ -64,58 +59,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return user.id
   }, [supabase])
 
-  const refreshUnreadCountForUser = useCallback(async (userId: string) => {
-    const { count: directCount, error: directError } = await supabase
-      .from('messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('receiver_id', userId)
-      .or('status.neq.read,status.is.null')
+  const refreshUnreadCountForUser = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
 
-    if (directError) {
-      console.error('[notifications] direct unread count failed:', directError)
-      return
-    }
-
-    const { data: memberships, error: membershipError } = await supabase
-      .from('chat_group_members')
-      .select('group_id, last_read_at, joined_at')
-      .eq('user_id', userId)
-
-    if (membershipError) {
-      if (!isMissingTableError(membershipError)) {
-        console.error('[notifications] group membership unread count failed:', membershipError)
-      }
-      setTotalUnread(directCount ?? 0)
-      return
-    }
-
-    let groupUnread = 0
-    for (const membership of memberships || []) {
-      const since = membership.last_read_at || membership.joined_at || new Date(0).toISOString()
-      const { count, error } = await supabase
-        .from('chat_group_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('group_id', membership.group_id)
-        .neq('sender_id', userId)
-        .gt('created_at', since)
-
-      if (error) {
-        if (!isMissingTableError(error)) {
-          console.error('[notifications] group unread count failed:', error)
+      const res = await fetch('/api/chat/threads', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
         }
-        continue
-      }
-
-      groupUnread += count ?? 0
+      })
+      if (!res.ok) return
+      const threads = await res.json() as { unreadCount: number }[]
+      const total = threads.reduce((acc, t) => acc + (t.unreadCount || 0), 0)
+      setTotalUnread(total)
+    } catch (err) {
+      console.error('[notifications] failed to refresh unread:', err)
     }
-
-    setTotalUnread((directCount ?? 0) + groupUnread)
   }, [supabase])
 
   const refreshUnreadCount = useCallback(async () => {
     const userId = await ensureCurrentUserId()
     if (!userId) return
-    await refreshUnreadCountForUser(userId)
+    await refreshUnreadCountForUser()
   }, [ensureCurrentUserId, refreshUnreadCountForUser])
 
   useEffect(() => {
@@ -140,103 +106,56 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       setCurrentUserId(user.id)
       currentUserIdRef.current = user.id
-      await refreshUnreadCountForUser(user.id)
-
-      const channel = supabase
-        .channel('global:notifications')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages',
-            filter: `receiver_id=eq.${user.id}`,
-          },
-          () => void refreshUnreadCountForUser(user.id)
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `receiver_id=eq.${user.id}`,
-          },
-          () => void refreshUnreadCountForUser(user.id)
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'chat_group_messages',
-          },
-          () => void refreshUnreadCountForUser(user.id)
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'chat_group_members',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => void refreshUnreadCountForUser(user.id)
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'chat_group_members',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => void refreshUnreadCountForUser(user.id)
-        )
-        .subscribe()
-
-      channelRef.current = channel
+      await refreshUnreadCountForUser()
     }
 
     void init()
-
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current)
-    }
   }, [refreshUnreadCountForUser, supabase])
 
   const setConversationRead = useCallback(async (otherUserId: string) => {
     const userId = await ensureCurrentUserId()
     if (!userId) return
 
-    const { error } = await supabase.rpc('mark_direct_messages_read', {
-      p_sender_id: otherUserId
-    })
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
 
-    if (error) {
-      console.error('[notifications] mark conversation read failed:', error)
-      return
+    try {
+      await fetch('/api/chat/messages/read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ senderId: otherUserId })
+      })
+    } catch (err) {
+      console.error('[notifications] mark conversation read failed:', err)
     }
 
-    await refreshUnreadCountForUser(userId)
+    await refreshUnreadCountForUser()
   }, [ensureCurrentUserId, refreshUnreadCountForUser, supabase])
 
   const setGroupRead = useCallback(async (groupId: string) => {
     const userId = await ensureCurrentUserId()
     if (!userId) return
 
-    const { error } = await supabase.rpc('mark_chat_group_read', {
-      p_group_id: groupId
-    })
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
 
-    if (error) {
-      if (!isMissingTableError(error)) {
-        console.error('[notifications] mark group read failed:', error)
-      }
-      return
+    try {
+      await fetch('/api/chat/groups/read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ groupId })
+      })
+    } catch (err) {
+      console.error('[notifications] mark group read failed:', err)
     }
 
-    await refreshUnreadCountForUser(userId)
+    await refreshUnreadCountForUser()
   }, [ensureCurrentUserId, refreshUnreadCountForUser, supabase])
 
   useEffect(() => {
