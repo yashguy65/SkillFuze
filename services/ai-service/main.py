@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pipelines.embedder import get_embedder, get_kw_model
+from pipelines.embedder import get_embedder
 from routers import ingest, persona, match, tags, linkedin, push
 from dotenv import load_dotenv
 
@@ -11,12 +11,10 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm up the embedder and KeyBERT on startup so memory is allocated once
+    # Warm up the embedder on startup so memory is allocated once
     print("Warming up HuggingFace Embeddings model...")
     get_embedder()
-    print("Model loaded. Warming up KeyBERT...")
-    get_kw_model()
-    print("KeyBERT ready.")
+    print("Model loaded and ready.")
     yield
     print("Shutting down...")
 
