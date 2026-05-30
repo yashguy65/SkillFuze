@@ -6,7 +6,7 @@ import { Send, Search, Check, CheckCheck, MessageSquare, Users, X } from 'lucide
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '../notifications-context'
-import { RealtimeChannel } from '@supabase/supabase-js'
+import { Client } from '@stomp/stompjs'
 
 type MessageStatus = 'sent' | 'delivered' | 'read'
 type ChatKind = 'direct' | 'group'
@@ -52,36 +52,43 @@ type DiscoverUser = {
 
 type DbMessage = {
   id: string
-  sender_id: string
-  receiver_id: string
+  sender_id?: string
+  senderId?: string
+  receiver_id?: string
+  receiverId?: string
   text: string
   status?: MessageStatus | null
-  created_at: string
-}
-
-type DbGroup = {
-  id: string
-  name: string
-  avatar_url?: string | null
-  created_by: string
-  created_at: string
-  updated_at?: string | null
-}
-
-type DbGroupMember = {
-  group_id: string
-  user_id: string
-  role?: string | null
-  last_read_at?: string | null
-  joined_at?: string | null
+  created_at?: string
+  createdAt?: string
 }
 
 type DbGroupMessage = {
   id: string
-  group_id: string
-  sender_id: string
+  group_id?: string
+  groupId?: string
+  sender_id?: string
+  senderId?: string
   text: string
-  created_at: string
+  created_at?: string
+  createdAt?: string
+}
+
+type ChatThreadSummary = {
+  id: string
+  kind: ChatKind
+  userId?: string
+  groupId?: string
+  name: string
+  avatar: string
+  lastMessage: string
+  lastMessageTime: string
+  lastActivityAt: string
+  unreadCount: number
+  online: boolean
+  memberIds?: string[]
+  lastReadAt?: string | null
+  isOwner?: boolean
+  ownerId?: string
 }
 
 function formatMessageTime(createdAt: string) {
@@ -120,27 +127,33 @@ function avatarForName(name: string) {
 }
 
 function toDirectMessage(msg: DbMessage, overrideStatus?: MessageStatus): Message {
+  const senderId = msg.sender_id ?? msg.senderId
+  const receiverId = msg.receiver_id ?? msg.receiverId
+  const createdAt = msg.created_at ?? msg.createdAt
   return {
     id: msg.id,
-    senderId: msg.sender_id,
-    receiverId: msg.receiver_id,
+    senderId: senderId || '',
+    receiverId,
     text: msg.text,
-    timestamp: formatMessageTime(msg.created_at),
+    timestamp: formatMessageTime(createdAt || ''),
     status: overrideStatus ?? msg.status ?? 'sent',
-    created_at: msg.created_at
+    created_at: createdAt || ''
   }
 }
 
 function toGroupMessage(msg: DbGroupMessage, profiles: Map<string, DiscoverUser>): Message {
+  const senderId = msg.sender_id ?? msg.senderId
+  const groupId = msg.group_id ?? msg.groupId
+  const createdAt = msg.created_at ?? msg.createdAt
   return {
     id: msg.id,
-    senderId: msg.sender_id,
-    groupId: msg.group_id,
-    senderName: userName(msg.sender_id, profiles),
+    senderId: senderId || '',
+    groupId,
+    senderName: userName(senderId || '', profiles),
     text: msg.text,
-    timestamp: formatMessageTime(msg.created_at),
+    timestamp: formatMessageTime(createdAt || ''),
     status: 'sent',
-    created_at: msg.created_at
+    created_at: createdAt || ''
   }
 }
 
@@ -175,36 +188,6 @@ function createDirectChat(userId: string, profile?: DiscoverUser): Chat {
   }
 }
 
-function createGroupChat(
-  group: DbGroup,
-  members: DbGroupMember[],
-  myMembership: DbGroupMember,
-  profiles: Map<string, DiscoverUser>
-): Chat {
-  const memberIds = members.map((member) => member.user_id)
-  const memberNames = memberIds.map((memberId) => userName(memberId, profiles))
-
-  return {
-    id: `group_${group.id}`,
-    kind: 'group',
-    groupId: group.id,
-    name: group.name,
-    avatar: group.avatar_url || avatarForName(group.name),
-    unreadCount: 0,
-    online: false,
-    messages: [],
-    memberIds,
-    memberNames,
-    lastReadAt: myMembership.last_read_at ?? myMembership.joined_at ?? null,
-    isOwner: myMembership.role === 'owner',
-    ownerId: group.created_by
-  }
-}
-
-function isMissingTableError(error: { code?: string } | null) {
-  return error?.code === '42P01' || error?.code === '42703'
-}
-
 function MessagesContent() {
   const searchParams = useSearchParams()
   const initialUserId = searchParams.get('user_id')
@@ -229,8 +212,7 @@ function MessagesContent() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
-  const chatChannelRef = useRef<RealtimeChannel | null>(null)
-  const presenceChannelRef = useRef<RealtimeChannel | null>(null)
+  const stompClientRef = useRef<Client | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const selectedChatIdRef = useRef<string | null>(null)
   const initialUserIdRef = useRef(initialUserId)
@@ -238,7 +220,6 @@ function MessagesContent() {
   const chatProfilesRef = useRef<Map<string, DiscoverUser>>(new Map())
   const groupIdsRef = useRef<Set<string>>(new Set())
   const chatsRef = useRef<Chat[]>([])
-  const pendingUpdatesRef = useRef<Map<string, DbMessage>>(new Map())
 
   const chatPartners = useMemo(() => {
     const directChatUserIds = new Set(
@@ -252,7 +233,6 @@ function MessagesContent() {
   const userProfilesMap = useMemo(() => {
     return new Map(allUsers.map((u) => [u.id, u]))
   }, [allUsers])
-
 
   useEffect(() => {
     chatsRef.current = chats
@@ -322,7 +302,7 @@ function MessagesContent() {
     }
   }, [markDirectRead])
 
-  const loadChats = useCallback(async (myId: string) => {
+  const loadChats = useCallback(async (myId: string, accessToken: string) => {
     const res = await fetch('/api/users/discover')
     const discoverData = await res.json()
     const users: DiscoverUser[] = discoverData.users || []
@@ -330,126 +310,103 @@ function MessagesContent() {
     setAllUsers(users)
     setDiscoverUsers(users.filter((u) => u.id !== myId))
 
-    const directChatMap = new Map<string, Chat>()
-
-    const { data: messagesData, error: messagesError } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`)
-      .order('created_at', { ascending: true })
-
-    if (messagesError && !isMissingTableError(messagesError)) {
-      console.error('Error fetching messages:', messagesError)
-    }
-
-    const validMessages = (messagesData || []) as DbMessage[]
-
-    validMessages.forEach((msg) => {
-      const otherUserId = msg.sender_id === myId ? msg.receiver_id : msg.sender_id
-      const chat = directChatMap.get(otherUserId) ?? createDirectChat(otherUserId, chatProfilesRef.current.get(otherUserId))
-      const formattedMessage = toDirectMessage(msg)
-
-      chat.messages.push(formattedMessage)
-      chat.lastMessage = msg.text
-      chat.lastMessageTime = formattedMessage.timestamp
-      chat.lastActivityAt = msg.created_at
-      chat.unreadCount = countDirectUnread(chat.messages, myId)
-      directChatMap.set(otherUserId, chat)
+    const threadsRes = await fetch('/api/chat/threads', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
     })
+    if (!threadsRes.ok) throw new Error('Failed to load active threads')
+    const summaries = await threadsRes.json() as ChatThreadSummary[]
 
-    const groupChats: Chat[] = []
-    const { data: myMemberships, error: membershipError } = await supabase
-      .from('chat_group_members')
-      .select('*')
-      .eq('user_id', myId)
+    const validGroupIds = new Set<string>()
 
-    if (membershipError && !isMissingTableError(membershipError)) {
-      console.error('Error fetching group memberships:', membershipError)
-    }
+    const finalChats = await Promise.all(summaries.map(async (t) => {
+      let messages: Message[] = []
+      try {
+        if (t.kind === 'direct' && t.userId) {
+          const histRes = await fetch(`/api/chat/history/direct?receiverId=${t.userId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          })
+          if (histRes.ok) {
+            const dbMsgs = await histRes.json() as DbMessage[]
+            messages = dbMsgs.map(m => toDirectMessage(m))
+          }
+        } else if (t.kind === 'group' && t.groupId) {
+          validGroupIds.add(t.groupId.toString())
+          const histRes = await fetch(`/api/chat/history/group?groupId=${t.groupId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          })
+          if (histRes.ok) {
+            const dbMsgs = await histRes.json() as DbGroupMessage[]
+            messages = dbMsgs.map(m => toGroupMessage(m, chatProfilesRef.current))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load message history for thread: ' + t.id, err)
+      }
 
-    const memberships = (myMemberships || []) as DbGroupMember[]
-    const groupIds = memberships.map((membership) => membership.group_id)
-    groupIdsRef.current = new Set(groupIds)
+      const lastMessageObj = messages[messages.length - 1]
+      const lastMessageText = t.kind === 'group'
+        ? (lastMessageObj ? `${lastMessageObj.senderName}: ${lastMessageObj.text}` : `${t.memberIds?.length || 0} members`)
+        : (lastMessageObj ? lastMessageObj.text : '')
 
-    if (groupIds.length > 0) {
-      const [{ data: groupsData, error: groupsError }, { data: allMembersData, error: allMembersError }, { data: groupMessagesData, error: groupMessagesError }] = await Promise.all([
-        supabase.from('chat_groups').select('*').in('id', groupIds),
-        supabase.from('chat_group_members').select('*').in('group_id', groupIds),
-        supabase.from('chat_group_messages').select('*').in('group_id', groupIds).order('created_at', { ascending: true })
-      ])
+      return {
+        id: t.id,
+        kind: t.kind,
+        userId: t.userId ? t.userId.toString() : undefined,
+        groupId: t.groupId ? t.groupId.toString() : undefined,
+        name: t.kind === 'group' ? t.name : (chatProfilesRef.current.get(t.userId?.toString() || '')?.username || `User ${t.userId?.toString().substring(0, 8)}`),
+        avatar: t.kind === 'group' ? (t.avatar || avatarForName(t.name)) : (chatProfilesRef.current.get(t.userId?.toString() || '')?.avatar || avatarForName(chatProfilesRef.current.get(t.userId?.toString() || '')?.username || 'user')),
+        unreadCount: t.unreadCount,
+        online: t.online,
+        messages,
+        memberIds: t.memberIds ? t.memberIds.map(id => id.toString()) : [],
+        memberNames: t.memberIds ? t.memberIds.map(id => userName(id.toString(), chatProfilesRef.current)) : [],
+        lastReadAt: t.lastReadAt,
+        isOwner: t.isOwner,
+        ownerId: t.ownerId ? t.ownerId.toString() : undefined,
+        lastMessage: lastMessageText,
+        lastMessageTime: lastMessageObj ? lastMessageObj.timestamp : undefined,
+        lastActivityAt: t.lastActivityAt
+      } as Chat
+    }))
 
-      if (groupsError && !isMissingTableError(groupsError)) console.error('Error fetching groups:', groupsError)
-      if (allMembersError && !isMissingTableError(allMembersError)) console.error('Error fetching group members:', allMembersError)
-      if (groupMessagesError && !isMissingTableError(groupMessagesError)) console.error('Error fetching group messages:', groupMessagesError)
+    groupIdsRef.current = validGroupIds
 
-      const groups = (groupsData || []) as DbGroup[]
-      const allMembers = (allMembersData || []) as DbGroupMember[]
-      const groupMessages = (groupMessagesData || []) as DbGroupMessage[]
-
-      const messagesByGroup = new Map<string, DbGroupMessage[]>()
-      groupMessages.forEach((msg) => {
-        const existing = messagesByGroup.get(msg.group_id) || []
-        existing.push(msg)
-        messagesByGroup.set(msg.group_id, existing)
-      })
-
-      groups.forEach((group) => {
-        const myMembership = memberships.find((membership) => membership.group_id === group.id)
-        if (!myMembership) return
-
-        const members = allMembers.filter((member) => member.group_id === group.id)
-        const chat = createGroupChat(group, members, myMembership, chatProfilesRef.current)
-        const messages = (messagesByGroup.get(group.id) || []).map((msg) => toGroupMessage(msg, chatProfilesRef.current))
-        const lastMessage = messages[messages.length - 1]
-
-        chat.messages = messages
-        chat.lastMessage = lastMessage ? `${lastMessage.senderName}: ${lastMessage.text}` : `${chat.memberIds?.length || 0} members`
-        chat.lastMessageTime = lastMessage?.timestamp
-        chat.lastActivityAt = lastMessage?.created_at || group.updated_at || group.created_at
-        chat.unreadCount = countGroupUnread(messages, myId, chat.lastReadAt)
-        groupChats.push(chat)
-      })
-    }
-
-    let finalChats = sortChats([
-      ...Array.from(directChatMap.values()),
-      ...groupChats
-    ])
+    let sortedChats = sortChats(finalChats)
 
     const targetUserId = initialUserIdRef.current
     const targetGroupId = initialGroupIdRef.current
     let targetChat: Chat | undefined
 
     if (targetGroupId) {
-      targetChat = finalChats.find((chat) => chat.kind === 'group' && chat.groupId === targetGroupId)
+      targetChat = sortedChats.find((chat) => chat.kind === 'group' && chat.groupId === targetGroupId)
     } else if (targetUserId) {
-      targetChat = finalChats.find((chat) => chat.kind === 'direct' && chat.userId === targetUserId)
+      targetChat = sortedChats.find((chat) => chat.kind === 'direct' && chat.userId === targetUserId)
       if (!targetChat) {
         targetChat = createDirectChat(targetUserId, chatProfilesRef.current.get(targetUserId))
       }
     } else {
-      targetChat = finalChats[0]
+      targetChat = sortedChats[0]
     }
 
     if (targetChat) {
-      finalChats = [targetChat, ...finalChats.filter((chat) => chat.id !== targetChat?.id)]
+      sortedChats = [targetChat, ...sortedChats.filter((chat) => chat.id !== targetChat?.id)]
       setSelectedChatId(targetChat.id)
     }
 
-    setChats(finalChats)
+    setChats(sortedChats)
 
     if (targetChat?.kind === 'direct' && targetChat.userId) {
       void markDirectRead(targetChat.userId)
     } else if (targetChat?.kind === 'group' && targetChat.groupId) {
       void markGroupRead(targetChat.groupId)
     }
-  }, [markDirectRead, markGroupRead, supabase])
+  }, [markDirectRead, markGroupRead])
 
   useEffect(() => {
-    // Guard against React Strict Mode's double-invocation: the cleanup sets
-    // `cancelled = true` synchronously, so the second async initData() call
-    // detects it after every await and exits before touching any channels.
     let cancelled = false
+    let stompClient: Client | null = null
 
     const initData = async () => {
       try {
@@ -464,51 +421,86 @@ function MessagesContent() {
         setCurrentUserId(myId)
         currentUserIdRef.current = myId
 
-        await loadChats(myId)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+
+        await loadChats(myId, session.access_token)
         if (cancelled) return
 
-        const presenceChannel = supabase
-          .channel(`online-users:${myId}`, {
-            config: { presence: { key: myId } }
-          })
-          .on('presence', { event: 'sync' }, () => {
-            const state = presenceChannel.presenceState()
-            setOnlineUsers(new Set<string>(Object.keys(state)))
-          })
-          .subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-              await presenceChannel.track({ online_at: new Date().toISOString() })
-            }
-          })
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const host = window.location.hostname
+        
+        let brokerURL = ''
+        if (process.env.NODE_ENV === 'development' || host === 'localhost' || host === '127.0.0.1') {
+          brokerURL = `${protocol}//${host}:8080/ws-chat`
+        } else {
+          const apiHost = process.env.NEXT_PUBLIC_API_URL
+            ? process.env.NEXT_PUBLIC_API_URL.replace(/^https?:\/\//, '')
+            : host
+          brokerURL = `${protocol}//${apiHost}/ws-chat`
+        }
 
-        presenceChannelRef.current = presenceChannel
+        stompClient = new Client({
+          brokerURL,
+          connectHeaders: {
+            Authorization: `Bearer ${session.access_token}`
+          },
+          debug: (str) => {
+            console.log('[STOMP] ' + str)
+          },
+          reconnectDelay: 5000,
+          heartbeatIncoming: 4000,
+          heartbeatOutgoing: 4000
+        })
+        stompClient.onConnect = () => {
+          if (cancelled) {
+            stompClient?.deactivate()
+            return
+          }
+          console.log('[STOMP] Connected to Spring Boot chat socket')
 
-        const chatChannel = supabase
-          .channel('public:chat')
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-            const newMsg = payload.new as DbMessage
-            if (newMsg.sender_id !== myId && newMsg.receiver_id !== myId) return
+          stompClient?.subscribe('/user/queue/messages', (message) => {
+            const newMsg = JSON.parse(message.body) as DbMessage
+            const senderId = newMsg.sender_id ?? newMsg.senderId
+            const receiverId = newMsg.receiver_id ?? newMsg.receiverId
 
-            const otherUserId = newMsg.sender_id === myId ? newMsg.receiver_id : newMsg.sender_id
+            if (!senderId || !receiverId) return
+            if (senderId !== myId && receiverId !== myId) return
+
+            const msgId = newMsg.id
+            const msgText = newMsg.text
+            const msgCreatedAt = newMsg.created_at ?? newMsg.createdAt
+
+            const otherUserId = senderId === myId ? receiverId : senderId
             const chatId = `direct_${otherUserId}`
-            const isIncomingOpen = newMsg.receiver_id === myId && selectedChatIdRef.current === chatId
+            const isIncomingOpen = receiverId === myId && selectedChatIdRef.current === chatId
             const formattedMessage = toDirectMessage(newMsg, isIncomingOpen ? 'read' : undefined)
 
             setChats((prevChats) => {
               const existingChat = prevChats.find((chat) => chat.kind === 'direct' && chat.userId === otherUserId)
               const baseChat = existingChat ?? createDirectChat(otherUserId, chatProfilesRef.current.get(otherUserId))
 
-              if (baseChat.messages.some((msg) => msg.id === newMsg.id)) {
+              if (baseChat.messages.some((msg) => msg.id === msgId)) {
                 return prevChats
               }
 
-              const messages = [...baseChat.messages, formattedMessage]
+              const tempIndex = baseChat.messages.findIndex(
+                (msg) => msg.id.startsWith('temp_') && msg.text === msgText && msg.senderId === senderId
+              )
+
+              const messages = [...baseChat.messages]
+              if (tempIndex !== -1) {
+                messages[tempIndex] = formattedMessage
+              } else {
+                messages.push(formattedMessage)
+              }
+
               const updatedChat: Chat = {
                 ...baseChat,
                 messages,
-                lastMessage: newMsg.text,
+                lastMessage: msgText,
                 lastMessageTime: formattedMessage.timestamp,
-                lastActivityAt: newMsg.created_at,
+                lastActivityAt: msgCreatedAt,
                 unreadCount: countDirectUnread(messages, myId)
               }
 
@@ -518,90 +510,96 @@ function MessagesContent() {
 
             if (isIncomingOpen) {
               void markDirectRead(otherUserId)
-            }
-          })
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-            const updatedMsg = payload.new as DbMessage
-            if (updatedMsg.sender_id !== myId && updatedMsg.receiver_id !== myId) return
-
-            const otherUserId = updatedMsg.sender_id === myId ? updatedMsg.receiver_id : updatedMsg.sender_id
-
-            setChats((prevChats) => prevChats.map((chat) => {
-              if (chat.kind !== 'direct' || chat.userId !== otherUserId) return chat
-
-              const messageExists = chat.messages.some((msg) => msg.id === updatedMsg.id)
-              if (!messageExists) {
-                pendingUpdatesRef.current.set(updatedMsg.id, updatedMsg)
-                return chat
-              }
-
-              const messages = chat.messages.map((msg) => (
-                msg.id === updatedMsg.id
-                  ? {
-                    ...msg,
-                    text: updatedMsg.text,
-                    status: updatedMsg.status ?? msg.status,
-                    created_at: updatedMsg.created_at,
-                    timestamp: formatMessageTime(updatedMsg.created_at)
-                  }
-                  : msg
-              ))
-
-              const lastMessage = messages[messages.length - 1]
-
-              return {
-                ...chat,
-                messages,
-                lastMessage: lastMessage?.text,
-                lastMessageTime: lastMessage?.timestamp,
-                lastActivityAt: lastMessage?.created_at,
-                unreadCount: countDirectUnread(messages, myId)
-              }
-            }))
-          })
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_group_messages' }, (payload) => {
-            const newMsg = payload.new as DbGroupMessage
-            if (!groupIdsRef.current.has(newMsg.group_id)) return
-
-            const chatId = `group_${newMsg.group_id}`
-            const isOpen = selectedChatIdRef.current === chatId
-            const formattedMessage = toGroupMessage(newMsg, chatProfilesRef.current)
-
-            setChats((prevChats) => {
-              const existingChat = prevChats.find((chat) => chat.kind === 'group' && chat.groupId === newMsg.group_id)
-              if (!existingChat || existingChat.messages.some((msg) => msg.id === newMsg.id)) return prevChats
-
-              const nextLastReadAt = isOpen ? new Date().toISOString() : existingChat.lastReadAt
-              const messages = [...existingChat.messages, formattedMessage]
-              const updatedChat: Chat = {
-                ...existingChat,
-                messages,
-                lastMessage: `${formattedMessage.senderName}: ${formattedMessage.text}`,
-                lastMessageTime: formattedMessage.timestamp,
-                lastActivityAt: formattedMessage.created_at,
-                lastReadAt: nextLastReadAt,
-                unreadCount: isOpen ? 0 : countGroupUnread(messages, myId, existingChat.lastReadAt)
-              }
-
-              const withoutUpdated = prevChats.filter((chat) => chat.id !== chatId)
-              return sortChats([updatedChat, ...withoutUpdated])
-            })
-
-            if (isOpen) {
-              void markGroupRead(newMsg.group_id)
             } else {
               void refreshUnreadCount()
             }
           })
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_group_members', filter: `user_id=eq.${myId}` }, () => {
-            void loadChats(myId)
-            void refreshUnreadCount()
-          })
-          .subscribe()
 
-        chatChannelRef.current = chatChannel
+          stompClient?.subscribe('/topic/presence', (message) => {
+            const event = JSON.parse(message.body) as { userId: string; status: 'online' | 'offline' }
+            setOnlineUsers((prev) => {
+              const next = new Set(prev)
+              if (event.status === 'online') {
+                next.add(event.userId)
+              } else {
+                next.delete(event.userId)
+              }
+              return next
+            })
+          })
+
+          groupIdsRef.current.forEach((groupId) => {
+            stompClient?.subscribe(`/topic/groups/${groupId}`, (message) => {
+              const newMsg = JSON.parse(message.body) as DbGroupMessage
+              const senderId = newMsg.sender_id ?? newMsg.senderId
+              const msgGroupId = newMsg.group_id ?? newMsg.groupId
+
+              if (!senderId || !msgGroupId) return
+
+              const msgId = newMsg.id
+              const msgText = newMsg.text
+              const msgCreatedAt = newMsg.created_at ?? newMsg.createdAt
+              const chatId = `group_${msgGroupId}`
+              const isOpen = selectedChatIdRef.current === chatId
+              const formattedMessage = toGroupMessage(newMsg, chatProfilesRef.current)
+
+              setChats((prevChats) => {
+                const existingChat = prevChats.find((chat) => chat.kind === 'group' && chat.groupId === msgGroupId)
+                if (!existingChat || existingChat.messages.some((msg) => msg.id === msgId)) return prevChats
+
+                const tempIndex = existingChat.messages.findIndex(
+                  (msg) => msg.id.startsWith('temp_') && msg.text === msgText && msg.senderId === senderId
+                )
+
+                const messages = [...existingChat.messages]
+                if (tempIndex !== -1) {
+                  messages[tempIndex] = formattedMessage
+                } else {
+                  messages.push(formattedMessage)
+                }
+
+                const nextLastReadAt = isOpen ? new Date().toISOString() : existingChat.lastReadAt
+                const updatedChat: Chat = {
+                  ...existingChat,
+                  messages,
+                  lastMessage: `${formattedMessage.senderName}: ${formattedMessage.text}`,
+                  lastMessageTime: formattedMessage.timestamp,
+                  lastActivityAt: msgCreatedAt,
+                  lastReadAt: nextLastReadAt,
+                  unreadCount: isOpen ? 0 : countGroupUnread(messages, myId, existingChat.lastReadAt)
+                }
+
+                const withoutUpdated = prevChats.filter((chat) => chat.id !== chatId)
+                return sortChats([updatedChat, ...withoutUpdated])
+              })
+
+              if (isOpen) {
+                void markGroupRead(msgGroupId)
+              } else {
+                void refreshUnreadCount()
+              }
+            })
+          })
+        }
+
+        stompClient.activate()
+        stompClientRef.current = stompClient
+
+        // Fetch currently online users from REST endpoint
+        try {
+          const presenceRes = await fetch('/api/chat/presence/online', {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          })
+          if (presenceRes.ok) {
+            const onlineIds = await presenceRes.json() as string[]
+            setOnlineUsers(new Set(onlineIds))
+          }
+        } catch (err) {
+          console.error('Failed to load initial online user presence', err)
+        }
+
       } catch (err) {
-        console.error('Failed to init messages', err)
+        console.error('Failed to initialize messages', err)
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -611,25 +609,19 @@ function MessagesContent() {
 
     return () => {
       cancelled = true
-      if (chatChannelRef.current) {
-        void supabase.removeChannel(chatChannelRef.current)
-        chatChannelRef.current = null
+      if (stompClient) {
+        console.log('[STOMP] Deactivating socket client')
+        stompClient.deactivate()
       }
-      if (presenceChannelRef.current) {
-        void supabase.removeChannel(presenceChannelRef.current)
-        presenceChannelRef.current = null
-      }
+      stompClientRef.current = null
     }
   }, [loadChats, markDirectRead, markGroupRead, refreshUnreadCount, supabase])
 
   useEffect(() => {
     if (!initialUserId || isLoading) return
-    // Defer so setState is not called synchronously inside the effect body
     const t = setTimeout(() => selectDirectChatByUserId(initialUserId), 0)
     return () => clearTimeout(t)
   }, [initialUserId, isLoading, selectDirectChatByUserId])
-
-
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -673,74 +665,27 @@ function MessagesContent() {
     })))
 
     if (selectedChat.kind === 'group') {
-      const { data, error } = await supabase.from('chat_group_messages').insert({
-        group_id: selectedChat.groupId,
-        sender_id: currentUserId,
-        text: msgText
-      }).select().single()
-
-      if (error) {
-        console.error('Error sending group message:', error)
-        return
+      if (stompClientRef.current && stompClientRef.current.connected) {
+        stompClientRef.current.publish({
+          destination: '/app/chat.sendGroup',
+          body: JSON.stringify({
+            groupId: selectedChat.groupId,
+            text: msgText
+          })
+        })
       }
-
-      if (data) {
-        const inserted = data as DbGroupMessage
-        setChats((prevChats) => prevChats.map((chat) => {
-          if (chat.id !== selectedChat.id) return chat
-          const insertedMessage = toGroupMessage(inserted, chatProfilesRef.current)
-          const messages = chat.messages.map((msg) => (msg.id === tempId ? insertedMessage : msg))
-
-          return {
-            ...chat,
-            messages,
-            lastMessage: `${insertedMessage.senderName}: ${insertedMessage.text}`,
-            lastMessageTime: insertedMessage.timestamp,
-            lastActivityAt: insertedMessage.created_at
-          }
-        }))
-      }
-
       if (selectedChat.groupId) void markGroupRead(selectedChat.groupId)
       return
     }
 
-    const { data, error } = await supabase.from('messages').insert({
-      sender_id: currentUserId,
-      receiver_id: selectedChat.userId,
-      text: msgText,
-      status: 'sent'
-    }).select().single()
-
-    if (error) {
-      console.error('Error sending message:', error)
-      return
-    }
-
-    if (data) {
-      const inserted = data as DbMessage
-      setChats((prevChats) => prevChats.map((chat) => {
-        if (chat.id !== selectedChat.id) return chat
-
-        const pendingUpdate = pendingUpdatesRef.current.get(inserted.id)
-        if (pendingUpdate) {
-          pendingUpdatesRef.current.delete(inserted.id)
-          inserted.status = pendingUpdate.status ?? inserted.status
-          inserted.text = pendingUpdate.text ?? inserted.text
-        }
-
-        const messages = chat.messages.map((msg) => (
-          msg.id === tempId ? { ...toDirectMessage(inserted), status: inserted.status ?? msg.status } : msg
-        ))
-
-        return {
-          ...chat,
-          messages,
-          lastMessage: inserted.text,
-          lastMessageTime: formatMessageTime(inserted.created_at),
-          lastActivityAt: inserted.created_at
-        }
-      }))
+    if (stompClientRef.current && stompClientRef.current.connected) {
+      stompClientRef.current.publish({
+        destination: '/app/chat.sendDirect',
+        body: JSON.stringify({
+          receiverId: selectedChat.userId,
+          text: msgText
+        })
+      })
     }
   }
 
@@ -761,50 +706,40 @@ function MessagesContent() {
     const defaultName = chosenMembers.map((id) => userName(id, chatProfilesRef.current)).slice(0, 3).join(', ')
     const finalName = groupName.trim() || defaultName || 'New group'
 
-    const { data: groupData, error: groupError } = await supabase.from('chat_groups').insert({
-      name: finalName,
-      created_by: currentUserId
-    }).select().single()
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
 
-    if (groupError || !groupData) {
-      console.error('Error creating group:', groupError)
+      const res = await fetch('/api/chat/groups/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          name: finalName,
+          memberIds: chosenMembers
+        })
+      })
+
+      if (!res.ok) {
+        console.error('Error creating group')
+        setIsCreatingGroup(false)
+        return
+      }
+
+
+      // Re-trigger load to establish STOMP subscriptions
+      await loadChats(currentUserId, session.access_token)
+
+      setGroupName('')
+      setSelectedMemberIds(new Set())
+      setIsGroupModalOpen(false)
+    } catch (err) {
+      console.error('Failed to create group:', err)
+    } finally {
       setIsCreatingGroup(false)
-      return
     }
-
-    const newGroupId = groupData.id
-    const group: DbGroup = {
-      id: newGroupId,
-      name: finalName,
-      created_by: currentUserId,
-      created_at: groupData.created_at
-    }
-
-    const memberRows = [currentUserId, ...chosenMembers].map((userId) => ({
-      group_id: newGroupId,
-      user_id: userId,
-      role: userId === currentUserId ? 'owner' : 'member',
-      last_read_at: userId === currentUserId ? new Date().toISOString() : null
-    }))
-
-    const { error: membersError } = await supabase.from('chat_group_members').insert(memberRows)
-
-    if (membersError) {
-      console.error('Error adding group members:', membersError)
-      // Attempt cleanup if members fail
-      await supabase.from('chat_groups').delete().eq('id', newGroupId)
-      setIsCreatingGroup(false)
-      return
-    }
-
-    const chat = createGroupChat(group, memberRows, memberRows[0], chatProfilesRef.current)
-    groupIdsRef.current = new Set([...groupIdsRef.current, newGroupId])
-    setChats((prev) => sortChats([chat, ...prev]))
-    setSelectedChatId(chat.id)
-    setGroupName('')
-    setSelectedMemberIds(new Set())
-    setIsGroupModalOpen(false)
-    setIsCreatingGroup(false)
   }
 
   const handleDeleteGroup = async () => {
@@ -817,15 +752,19 @@ function MessagesContent() {
     setIsDeletingGroup(true)
 
     try {
-      const { data, error } = await supabase
-        .from('chat_groups')
-        .delete()
-        .eq('id', selectedChat.groupId)
-        .select()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
 
-      if (error || !data || data.length === 0) {
-        console.error('Error deleting group:', error)
-        alert('Failed to delete group. Please make sure you are the group owner and that you have run the RLS DELETE policy in your Supabase SQL Editor.')
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!res.ok) {
+        console.error('Error deleting group')
+        alert('Failed to delete group. Please make sure you are the group owner.')
         return
       }
 
@@ -848,24 +787,33 @@ function MessagesContent() {
     }
 
     try {
-      const { error } = await supabase.rpc('transfer_group_ownership', {
-        p_group_id: selectedChat.groupId,
-        p_new_owner_id: newAdminId
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch('/api/chat/groups/transfer-owner', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          groupId: selectedChat.groupId,
+          newOwnerId: newAdminId
+        })
       })
 
-      if (error) {
-        console.error('Error transferring admin rights:', error)
-        alert(`Failed to transfer admin rights: ${error.message}`)
+      if (!res.ok) {
+        console.error('Error transferring admin rights')
+        alert('Failed to transfer admin rights')
         return
       }
 
-      // Update local chats state to reflect new admin/ownership
       setChats((prevChats) => prevChats.map((chat) => {
         if (chat.groupId !== selectedChat.groupId) return chat
         return {
           ...chat,
-          isOwner: false, // previous admin loses rights
-          ownerId: newAdminId // new admin takes ownership
+          isOwner: false,
+          ownerId: newAdminId
         }
       }))
 
@@ -891,14 +839,14 @@ function MessagesContent() {
 
   return (
     <div className="flex h-full bg-slate-950 text-slate-200 overflow-hidden shadow-2xl">
-      <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50">
+      <div className="w-80 shrink-0 border-r border-slate-800 flex flex-col bg-slate-900/50">
         <div className="p-4 border-b border-slate-800">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Chat</h2>
             <button
               type="button"
               onClick={() => setIsGroupModalOpen(true)}
-              className="w-9 h-9 rounded-lg bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-lg bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-colors cursor-pointer"
               aria-label="Create group chat"
               title="Create group chat"
             >
@@ -1066,7 +1014,7 @@ function MessagesContent() {
               <button
                 type="submit"
                 disabled={!newMessage.trim()}
-                className="w-11 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 cursor-pointer"
                 aria-label="Send message"
               >
                 <Send className="w-5 h-5 ml-1" />
@@ -1083,8 +1031,8 @@ function MessagesContent() {
       )}
 
       {isGroupModalOpen && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-zoom-in">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div>
                 <h3 className="text-white font-semibold">New group chat</h3>
@@ -1093,7 +1041,7 @@ function MessagesContent() {
               <button
                 type="button"
                 onClick={() => setIsGroupModalOpen(false)}
-                className="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -1124,7 +1072,7 @@ function MessagesContent() {
                         key={user.id}
                         type="button"
                         onClick={() => toggleMember(user.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-blue-500/10 border border-blue-500/30' : 'border border-transparent hover:bg-slate-800/70'}`}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer ${isSelected ? 'bg-blue-500/10 border border-blue-500/30' : 'border border-transparent hover:bg-slate-800/70'}`}
                       >
                         <Image src={user.avatar || avatarForName(user.username)} alt={user.username} width={36} height={36} className="w-9 h-9 rounded-full object-cover border border-slate-700" unoptimized />
                         <span className="flex-1 text-sm text-slate-200 truncate">{user.username}</span>
@@ -1140,7 +1088,7 @@ function MessagesContent() {
                 type="button"
                 onClick={handleCreateGroup}
                 disabled={selectedMemberIds.size === 0 || isCreatingGroup}
-                className="w-full h-10 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full h-10 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {isCreatingGroup ? 'Creating...' : 'Create group'}
               </button>
@@ -1150,8 +1098,8 @@ function MessagesContent() {
       )}
 
       {isParticipantsModalOpen && selectedChat && selectedChat.kind === 'group' && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-zoom-in">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div>
                 <h3 className="text-white font-semibold">Group participants</h3>
