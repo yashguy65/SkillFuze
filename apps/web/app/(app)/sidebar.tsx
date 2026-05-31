@@ -33,7 +33,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   ]
 
   return (
-    <aside className="w-full h-16 border-t border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-row items-center justify-between px-6 z-40 md:sticky md:top-0 md:bottom-auto md:w-20 md:h-screen md:border-r md:border-t-0 md:flex-col md:py-6 md:px-0 md:justify-start md:gap-8">
+    <aside className="fixed bottom-0 left-0 right-0 w-full h-16 border-t border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-row items-center justify-between px-6 z-40 md:sticky md:top-0 md:bottom-auto md:left-auto md:right-auto md:w-20 md:h-screen md:border-r md:border-t-0 md:flex-col md:py-6 md:px-0 md:justify-start md:gap-8">
       {/* Logo / Brand mark */}
       <Link href="/dashboard" className="mb-8 shrink-0 hidden md:block">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform hover:scale-110 active:scale-95 overflow-hidden">
