@@ -10,6 +10,12 @@ class IngestResponse(BaseModel):
     chunks_stored: int
     extracted_tags: Optional[List[str]] = None
 
+class LinkedInProfileRequest(BaseModel):
+    user_id: str
+    name: Optional[str] = None
+    headline: Optional[str] = None
+    skills: Optional[List[str]] = None
+
 class PurgeRequest(BaseModel):
     user_id: str
 

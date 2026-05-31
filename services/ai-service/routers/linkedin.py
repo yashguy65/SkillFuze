@@ -1,10 +1,12 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from schemas.ingest import IngestResponse
+from schemas.ingest import IngestResponse, LinkedInProfileRequest
 from parsers.linkedin_parser import LinkedInParser
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
+from langchain_core.documents import Document
 
 router = APIRouter()
+
 
 @router.post("/ingest/linkedin", response_model=IngestResponse)
 async def ingest_linkedin_data(
@@ -55,3 +57,65 @@ async def ingest_linkedin_data(
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
     return IngestResponse(chunks_stored=chunks_stored, extracted_tags=extracted_skills)
+
+
+@router.post("/ingest/linkedin-profile", response_model=IngestResponse)
+async def ingest_linkedin_profile(payload: LinkedInProfileRequest):
+    """
+    Ingest LinkedIn profile data from OIDC metadata (no PDF required).
+    Accepts structured fields: name, headline, skills list.
+    Used for auto-sync on first LinkedIn sign-in and manual re-sync from Settings.
+    """
+    user_id = payload.user_id
+    name = payload.name or ""
+    headline = payload.headline or ""
+    skills = payload.skills or []
+
+    # Build a text document from available OIDC fields
+    parts = []
+    if name:
+        parts.append(f"Name: {name}")
+    if headline:
+        parts.append(f"Headline: {headline}")
+    if skills:
+        parts.append("Skills: " + ", ".join(skills))
+
+    if not parts:
+        return IngestResponse(chunks_stored=0, extracted_tags=[])
+
+    text = "\n".join(parts)
+
+    # Create a single document (profile is short — no splitting needed)
+    base_meta = {
+        "user_id": user_id,
+        "source": "linkedin",
+        "repo": "linkedin_profile",
+    }
+    documents = [Document(page_content=text, metadata={**base_meta, "languages": skills})]
+
+    # Embed
+    embedder = get_embedder()
+    embeddings = embedder.embed_documents([text])
+
+    rows = [{
+        "user_id": user_id,
+        "repo_name": "linkedin_profile",
+        "content": text,
+        "metadata": base_meta,
+        "embedding": embeddings[0]
+    }]
+
+    supabase = get_supabase()
+    try:
+        # Replace existing linkedin_profile chunks for this user
+        supabase.table("github_chunks").delete()\
+            .eq("user_id", user_id)\
+            .eq("repo_name", "linkedin_profile")\
+            .execute()
+        supabase.table("github_chunks").insert(rows).execute()
+        print(f"Inserted LinkedIn profile identity chunk for user {user_id}")
+    except Exception as e:
+        print("Supabase Error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
+
+    return IngestResponse(chunks_stored=1, extracted_tags=skills)

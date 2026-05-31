@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
-import { syncGitHub, syncLinkedIn, purgeData } from '@/lib/ai-service'
+import { syncGitHub, syncLinkedIn, syncLinkedInProfile, purgeData } from '@/lib/ai-service'
 import { useNotifications } from '../notifications-context'
 import { GitBranch, CheckCircle2, Loader2, RefreshCw, FileUp, Bell, Shield, Trash2, Sun, Moon, Monitor } from 'lucide-react'
 
@@ -13,8 +13,13 @@ export default function SettingsPage() {
   const [user, setUser] = useState<{
     id: string
     email: string | undefined
-    user_metadata: Record<string, string>
+    user_metadata: Record<string, unknown>
+    app_metadata: Record<string, unknown>
+    identities?: Array<{ provider: string }>
   } | null>(null)
+
+  const [linkedinResyncStatus, setLinkedinResyncStatus] = useState<SyncStatus>('idle')
+  const [linkedinResyncMessage, setLinkedinResyncMessage] = useState('')
 
   // Sync State
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
@@ -46,7 +51,7 @@ export default function SettingsPage() {
       if (user) {
         // Load discoverable preference (default true)
         if (user.user_metadata?.discoverable !== undefined) {
-          setDiscoverable(user.user_metadata.discoverable)
+          setDiscoverable(user.user_metadata.discoverable as boolean)
         } else {
           // If not set, set it to true default in DB
           supabase.auth.updateUser({ data: { discoverable: true } })
@@ -69,7 +74,29 @@ export default function SettingsPage() {
     { value: 'system', label: 'System', icon: Monitor, color: 'text-teal-400' },
   ] as const
 
-  const githubUsername = user.user_metadata?.user_name
+  const githubUsername = user.user_metadata?.user_name as string | undefined
+
+  // Detect LinkedIn-connected users
+  const isLinkedInUser =
+    user.app_metadata?.provider === 'linkedin_oidc' ||
+    user.identities?.some((id) => id.provider === 'linkedin_oidc')
+  const linkedInName = (user.user_metadata?.full_name ?? user.user_metadata?.name ?? '') as string
+  const linkedInAvatar = user.user_metadata?.avatar_url as string | undefined
+
+  const handleResyncLinkedIn = async () => {
+    setLinkedinResyncStatus('loading')
+    setLinkedinResyncMessage('')
+    try {
+      await syncLinkedInProfile({ name: linkedInName || undefined })
+      setLinkedinResyncStatus('success')
+      setLinkedinResyncMessage('Profile re-synced from your LinkedIn account.')
+    } catch (err: unknown) {
+      setLinkedinResyncStatus('error')
+      setLinkedinResyncMessage(err instanceof Error ? err.message : 'Re-sync failed. Please try again.')
+    } finally {
+      setTimeout(() => setLinkedinResyncStatus('idle'), 6000)
+    }
+  }
 
   const handleSyncGitHub = async () => {
     if (!githubUsername) {
@@ -280,29 +307,102 @@ export default function SettingsPage() {
             </div>
 
             {/* LinkedIn Sync */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-950/50 border border-slate-800/80">
-              <div>
-                <h3 className="font-medium text-slate-200 flex items-center gap-2">
-                  <FileUp className="w-4 h-4 text-slate-400" />
-                  LinkedIn Sync
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Upload your LinkedIn profile PDF to extract skills
-                </p>
-                {linkedinSyncMessage && (
-                  <p className={`text-xs mt-2 ${linkedinSyncStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`}>
-                    {linkedinSyncMessage}
-                  </p>
-                )}
-              </div>
-              <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleSyncLinkedIn} />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={linkedinSyncStatus === 'loading'}
-                className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-blue-500/20 text-slate-200 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {linkedinSyncStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-              </button>
+            <div className="rounded-2xl bg-slate-950/50 border border-slate-800/80 overflow-hidden">
+              {isLinkedInUser ? (
+                /* ── Connected via LinkedIn OIDC ── */
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4">
+                  <div className="flex items-center gap-3">
+                    {linkedInAvatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={linkedInAvatar} alt={linkedInName} className="w-9 h-9 rounded-full border border-slate-700 shrink-0" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-[#0A66C2]/20 border border-[#0A66C2]/30 flex items-center justify-center shrink-0">
+                        <svg className="w-4 h-4 text-[#0A66C2]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="font-medium text-slate-200 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#0A66C2] inline-block" />
+                        LinkedIn Connected
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {linkedInName || user.email} &mdash; identity auto-synced to AI index
+                      </p>
+                      {linkedinResyncMessage && (
+                        <p className={`text-xs mt-1.5 ${linkedinResyncStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`}>
+                          {linkedinResyncMessage}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    id="settings-linkedin-resync-btn"
+                    onClick={handleResyncLinkedIn}
+                    disabled={linkedinResyncStatus === 'loading'}
+                    className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold bg-[#0A66C2]/10 hover:bg-[#0A66C2]/20 text-[#0A66C2] border border-[#0A66C2]/20 hover:border-[#0A66C2]/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {linkedinResyncStatus === 'loading'
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Syncing…</>
+                      : <><RefreshCw className="w-3.5 h-3.5" /> Re-sync Account</>}
+                  </button>
+                </div>
+              ) : (
+                /* ── Not connected — show PDF upload ── */
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4">
+                  <div>
+                    <h3 className="font-medium text-slate-200 flex items-center gap-2">
+                      <FileUp className="w-4 h-4 text-slate-400" />
+                      LinkedIn Sync
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Upload your LinkedIn profile PDF to extract skills
+                    </p>
+                    {linkedinSyncMessage && (
+                      <p className={`text-xs mt-2 ${linkedinSyncStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`}>
+                        {linkedinSyncMessage}
+                      </p>
+                    )}
+                  </div>
+                  <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleSyncLinkedIn} />
+                  <button
+                    id="settings-linkedin-pdf-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={linkedinSyncStatus === 'loading'}
+                    className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-blue-500/20 text-slate-200 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {linkedinSyncStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                  </button>
+                </div>
+              )}
+
+              {/* Supplement with PDF — shown for LinkedIn users too */}
+              {isLinkedInUser && (
+                <div className="border-t border-slate-800/80 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-medium text-slate-400 text-sm flex items-center gap-2">
+                      <FileUp className="w-3.5 h-3.5" />
+                      Supplement with PDF
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Upload your LinkedIn export PDF for richer skill extraction
+                    </p>
+                    {linkedinSyncMessage && (
+                      <p className={`text-xs mt-1.5 ${linkedinSyncStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`}>
+                        {linkedinSyncMessage}
+                      </p>
+                    )}
+                  </div>
+                  <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleSyncLinkedIn} />
+                  <button
+                    id="settings-linkedin-supplement-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={linkedinSyncStatus === 'loading'}
+                    className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {linkedinSyncStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>

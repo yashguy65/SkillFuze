@@ -49,6 +49,34 @@ export async function syncLinkedIn(userId: string, file: File): Promise<IngestRe
   return res.json() as Promise<IngestResponse>
 }
 
+// ── LinkedIn Profile (OIDC) Ingest ───────────────────────────────────────────
+
+export interface LinkedInProfileRequest {
+  name?: string
+  headline?: string
+  skills?: string[]
+}
+
+/**
+ * Sync LinkedIn identity metadata (from OIDC, no PDF needed).
+ * The server-side proxy always uses the authenticated session's user_id.
+ */
+export async function syncLinkedInProfile(
+  payload: LinkedInProfileRequest = {}
+): Promise<IngestResponse> {
+  const res = await fetch('/api/ai/linkedin-profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail ?? 'Failed to sync LinkedIn profile')
+  }
+
+  return res.json() as Promise<IngestResponse>
+}
 
 // ── Tags Ingest ───────────────────────────────────────────────────────────────
 

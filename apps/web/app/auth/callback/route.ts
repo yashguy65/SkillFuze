@@ -14,8 +14,32 @@ export async function GET(request: Request) {
 
   // 1. Try PKCE Code Exchange if 'code' is present
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // Auto-sync LinkedIn profile if user signed in with LinkedIn OIDC
+      // and hasn't been synced yet (to avoid re-syncing on every login)
+      const user = sessionData?.user
+      if (user) {
+        const isLinkedIn = user.app_metadata?.provider === 'linkedin_oidc' ||
+          user.identities?.some((id: { provider: string }) => id.provider === 'linkedin_oidc')
+
+        if (isLinkedIn && !user.user_metadata?.linkedin_profile_synced) {
+          // Fire-and-forget: don't block redirect on AI ingest
+          const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? null
+          
+          fetch(`${origin}/api/ai/linkedin-profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          }).catch((err) => console.error('LinkedIn auto-sync failed:', err))
+
+          // Mark as synced so we don't repeat on every login
+          supabase.auth.updateUser({
+            data: { linkedin_profile_synced: true }
+          }).catch(() => {/* non-critical */})
+        }
+      }
+
       return NextResponse.redirect(`${origin}${next}`)
     }
 
