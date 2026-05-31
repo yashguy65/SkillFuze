@@ -26,6 +26,7 @@ public class ChatThreadSummary {
     private long unreadCount;
     private boolean online;
     private List<UUID> memberIds;
+    private List<UUID> adminIds;
     private List<String> memberNames;
     private Instant lastReadAt;
     private boolean isOwner;

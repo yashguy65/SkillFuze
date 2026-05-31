@@ -156,6 +156,99 @@ public class ChatRestController {
         }
     }
 
+    @PostMapping("/groups/{groupId}/members/add")
+    public ResponseEntity<?> addMembers(
+            @PathVariable("groupId") UUID groupId,
+            @RequestBody AddMembersRequest request,
+            Principal principal) {
+        try {
+            UUID adminId = getUserId(principal);
+            chatService.addMembers(groupId, adminId, request.getMemberIds());
+            return ResponseEntity.ok().build();
+        } catch (SecurityException se) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(se.getMessage());
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to add group members", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/groups/{groupId}/members/kick")
+    public ResponseEntity<?> kickMember(
+            @PathVariable("groupId") UUID groupId,
+            @RequestBody KickMemberRequest request,
+            Principal principal) {
+        try {
+            UUID adminId = getUserId(principal);
+            chatService.kickMember(groupId, adminId, request.getMemberId());
+            return ResponseEntity.ok().build();
+        } catch (SecurityException se) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(se.getMessage());
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to kick group member", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/groups/{groupId}/members/make-admin")
+    public ResponseEntity<?> makeAdmin(
+            @PathVariable("groupId") UUID groupId,
+            @RequestBody MakeAdminRequest request,
+            Principal principal) {
+        try {
+            UUID adminId = getUserId(principal);
+            chatService.makeAdmin(groupId, adminId, request.getMemberId());
+            return ResponseEntity.ok().build();
+        } catch (SecurityException se) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(se.getMessage());
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to promote member to admin", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/groups/{groupId}/admin/resign")
+    public ResponseEntity<?> resignAdmin(
+            @PathVariable("groupId") UUID groupId,
+            Principal principal) {
+        try {
+            UUID userId = getUserId(principal);
+            chatService.resignAdmin(groupId, userId);
+            return ResponseEntity.ok().build();
+        } catch (SecurityException se) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(se.getMessage());
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to resign admin status", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/groups/{groupId}/leave")
+    public ResponseEntity<?> leaveGroup(
+            @PathVariable("groupId") UUID groupId,
+            Principal principal) {
+        try {
+            UUID userId = getUserId(principal);
+            chatService.leaveGroup(groupId, userId);
+            return ResponseEntity.ok().build();
+        } catch (SecurityException se) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(se.getMessage());
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to leave group", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+
     @GetMapping("/presence/online")
     public ResponseEntity<?> getOnlineUsers(Principal principal) {
         try {
@@ -201,5 +294,23 @@ public class ChatRestController {
         public void setGroupId(UUID groupId) { this.groupId = groupId; }
         public UUID getNewOwnerId() { return newOwnerId; }
         public void setNewOwnerId(UUID newOwnerId) { this.newOwnerId = newOwnerId; }
+    }
+
+    public static class AddMembersRequest {
+        private List<UUID> memberIds;
+        public List<UUID> getMemberIds() { return memberIds; }
+        public void setMemberIds(List<UUID> memberIds) { this.memberIds = memberIds; }
+    }
+
+    public static class KickMemberRequest {
+        private UUID memberId;
+        public UUID getMemberId() { return memberId; }
+        public void setMemberId(UUID memberId) { this.memberId = memberId; }
+    }
+
+    public static class MakeAdminRequest {
+        private UUID memberId;
+        public UUID getMemberId() { return memberId; }
+        public void setMemberId(UUID memberId) { this.memberId = memberId; }
     }
 }

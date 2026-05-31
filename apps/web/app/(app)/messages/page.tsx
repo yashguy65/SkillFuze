@@ -37,6 +37,7 @@ type Chat = {
   online: boolean
   messages: Message[]
   memberIds?: string[]
+  adminIds?: string[]
   memberNames?: string[]
   lastReadAt?: string | null
   isOwner?: boolean
@@ -86,6 +87,7 @@ type ChatThreadSummary = {
   unreadCount: number
   online: boolean
   memberIds?: string[]
+  adminIds?: string[]
   lastReadAt?: string | null
   isOwner?: boolean
   ownerId?: string
@@ -363,6 +365,7 @@ function MessagesContent() {
         online: t.online,
         messages,
         memberIds: t.memberIds ? t.memberIds.map(id => id.toString()) : [],
+        adminIds: t.adminIds ? t.adminIds.map(id => id.toString()) : [],
         memberNames: t.memberIds ? t.memberIds.map(id => userName(id.toString(), chatProfilesRef.current)) : [],
         lastReadAt: t.lastReadAt,
         isOwner: t.isOwner,
@@ -685,6 +688,11 @@ function MessagesContent() {
 
   const selectedChat = chats.find((chat) => chat.id === selectedChatId)
 
+  const addableUsers = useMemo(() => {
+    if (!selectedChat || selectedChat.kind !== 'group') return []
+    return chatPartners.filter(u => !selectedChat.memberIds?.includes(u.id))
+  }, [chatPartners, selectedChat])
+
   const handleSendMessage = async (e: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     if (!newMessage.trim() || !selectedChat || !currentUserId || !isConnected) return
@@ -838,7 +846,7 @@ function MessagesContent() {
     if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId) return
 
     const newAdminName = userName(newAdminId, chatProfilesRef.current)
-    if (!confirm(`Are you sure you want to make ${newAdminName} the admin of this group? You will lose admin rights.`)) {
+    if (!confirm(`Are you sure you want to make ${newAdminName} an admin of this group?`)) {
       return
     }
 
@@ -846,37 +854,161 @@ function MessagesContent() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const res = await fetch('/api/chat/groups/transfer-owner', {
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}/members/make-admin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          groupId: selectedChat.groupId,
-          newOwnerId: newAdminId
+          memberId: newAdminId
         })
       })
 
       if (!res.ok) {
-        console.error('Error transferring admin rights')
-        alert('Failed to transfer admin rights')
+        const errorText = await res.text()
+        alert(errorText || 'Failed to make member admin')
         return
       }
 
-      setChats((prevChats) => prevChats.map((chat) => {
-        if (chat.groupId !== selectedChat.groupId) return chat
-        return {
-          ...chat,
-          isOwner: false,
-          ownerId: newAdminId
-        }
-      }))
+      await loadChats(currentUserId, session.access_token)
+      alert(`${newAdminName} is now a group admin.`)
+    } catch (err) {
+      console.error('Failed to make admin:', err)
+    }
+  }
 
-      alert(`${newAdminName} is now the group admin.`)
+  const handleKickMember = async (memberId: string) => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId) return
+
+    const name = userName(memberId, chatProfilesRef.current)
+    if (!confirm(`Are you sure you want to kick ${name} from this group?`)) {
+      return
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}/members/kick`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          memberId: memberId
+        })
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        alert(errorText || 'Failed to kick member')
+        return
+      }
+
+      await loadChats(currentUserId, session.access_token)
+      alert(`${name} has been kicked.`)
+    } catch (err) {
+      console.error('Failed to kick member:', err)
+    }
+  }
+
+  const handleResignAdmin = async () => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId) return
+
+    const confirmInput = prompt('Type "confirm" to give up your admin status:')
+    if (confirmInput !== 'confirm') {
+      alert('Action cancelled: Confirmation word did not match.')
+      return
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}/admin/resign`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        alert(errorText || 'Failed to resign admin status')
+        return
+      }
+
+      await loadChats(currentUserId, session.access_token)
+      alert('You have resigned as admin. You are now a member.')
       setIsParticipantsModalOpen(false)
     } catch (err) {
-      console.error('Failed to transfer admin rights:', err)
+      console.error('Failed to resign admin status:', err)
+    }
+  }
+
+  const handleLeaveGroup = async () => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId) return
+
+    if (!confirm('Are you sure you want to leave this group?')) {
+      return
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}/leave`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        alert(errorText || 'Failed to leave group')
+        return
+      }
+
+      setChats((prev) => prev.filter((c) => c.groupId !== selectedChat.groupId))
+      setSelectedChatId(null)
+      setIsParticipantsModalOpen(false)
+      alert('You have left the group.')
+    } catch (err) {
+      console.error('Failed to leave group:', err)
+    }
+  }
+
+  const handleAddMembersToGroup = async (memberIdsToAdd: string[]) => {
+    if (!selectedChat || selectedChat.kind !== 'group' || !selectedChat.groupId || !currentUserId || memberIdsToAdd.length === 0) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch(`/api/chat/groups/${selectedChat.groupId}/members/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          memberIds: memberIdsToAdd
+        })
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        alert(errorText || 'Failed to add members')
+        return
+      }
+
+      await loadChats(currentUserId, session.access_token)
+      alert('Members added successfully.')
+    } catch (err) {
+      console.error('Failed to add members:', err)
     }
   }
 
@@ -1185,6 +1317,8 @@ function MessagesContent() {
                 {selectedChat.memberIds?.map((memberId) => {
                   const profile = userProfilesMap.get(memberId)
                   const name = profile?.username || `User ${memberId.substring(0, 8)}`
+                  const isUserAdmin = selectedChat.adminIds?.includes(memberId)
+                  const isMe = memberId === currentUserId
 
                   return (
                     <div
@@ -1201,49 +1335,102 @@ function MessagesContent() {
                           unoptimized
                         />
                         <span className="text-sm font-medium text-slate-200 truncate">
-                          {name}
+                          {name} {isMe && <span className="text-slate-500 text-xs">(you)</span>}
                         </span>
                       </div>
-                      {memberId === selectedChat.ownerId ? (
-                        <span className="text-[11px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-wider shrink-0">
-                          Admin
-                        </span>
-                      ) : (
-                        selectedChat.isOwner && (
+                      <div className="flex items-center gap-2">
+                        {isUserAdmin && (
+                          <span className="text-[11px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-wider shrink-0">
+                            Admin
+                          </span>
+                        )}
+                        {!isUserAdmin && selectedChat.isOwner && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void handleMakeAdmin(memberId)}
+                              className="text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-600 transition-colors shrink-0 cursor-pointer"
+                            >
+                              Make Admin
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleKickMember(memberId)}
+                              className="text-[11px] font-semibold text-red-400 hover:text-white bg-red-950/20 hover:bg-red-600 px-2.5 py-1 rounded border border-red-900/30 hover:border-red-500 transition-colors shrink-0 cursor-pointer"
+                            >
+                              Kick
+                            </button>
+                          </>
+                        )}
+                        {isMe && isUserAdmin && (
                           <button
                             type="button"
-                            onClick={() => void handleMakeAdmin(memberId)}
-                            className="text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-600 transition-colors shrink-0 cursor-pointer"
+                            onClick={() => void handleResignAdmin()}
+                            className="text-[11px] font-semibold text-amber-400 hover:text-white bg-amber-950/20 hover:bg-amber-600 px-2.5 py-1 rounded border border-amber-900/30 hover:border-amber-500 transition-colors shrink-0 cursor-pointer"
                           >
-                            Make Admin
+                            Resign Admin
                           </button>
-                        )
-                      )}
+                        )}
+                      </div>
                     </div>
                   )
                 })}
               </div>
             </div>
 
-            {selectedChat.isOwner && (
-              <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+            {/* Add Members Section */}
+            {selectedChat.isOwner && addableUsers.length > 0 && (
+              <div className="p-4 border-t border-slate-800 bg-slate-900/30 font-sans">
+                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Add Members</h4>
+                <div className="max-h-36 overflow-y-auto space-y-1 mb-2 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                  {addableUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        void handleAddMembersToGroup([user.id])
+                      }}
+                      className="w-full flex items-center justify-between p-2 rounded hover:bg-slate-800/50 text-left transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Image src={user.avatar || avatarForName(user.username)} alt={user.username} width={24} height={24} className="w-6 h-6 rounded-full object-cover border border-slate-700" unoptimized />
+                        <span className="text-xs text-slate-200 truncate">{user.username}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-blue-400 group-hover:text-blue-300 transition-colors">
+                        + Add
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 border-t border-slate-800 bg-slate-900/50 flex gap-2">
+              <button
+                type="button"
+                onClick={handleLeaveGroup}
+                className="flex-1 py-2 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer text-center"
+              >
+                Leave Group
+              </button>
+              {selectedChat.isOwner && selectedChat.ownerId === currentUserId && (
                 <button
                   type="button"
                   onClick={handleDeleteGroup}
                   disabled={isDeletingGroup}
-                  className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 animate-fade-in"
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
                 >
                   {isDeletingGroup ? (
                     <>
-                      <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
-                      Deleting group...
+                      <div className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
+                      Deleting...
                     </>
                   ) : (
                     'Delete Group'
                   )}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

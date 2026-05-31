@@ -226,5 +226,99 @@ public class ChatServiceTest {
         assertThat(groupSummary).isNotNull();
         assertThat(groupSummary.getLastMessage()).isEqualTo("Group Hello");
         assertThat(groupSummary.getUnreadCount()).isEqualTo(1L);
+        assertThat(groupSummary.getAdminIds()).containsExactly(ownerId);
+    }
+
+    @Test
+    public void testAddMembers() {
+        ChatGroup group = chatService.createGroup("Add Members Group", ownerId, Arrays.asList(member1Id));
+        
+        chatService.addMembers(group.getId(), ownerId, Arrays.asList(member2Id));
+        
+        List<ChatGroupMember> groupMembers = chatGroupMemberRepository.findByGroupId(group.getId());
+        assertThat(groupMembers).hasSize(3); // owner, member1, member2
+        assertThat(chatGroupMemberRepository.existsByGroupIdAndUserId(group.getId(), member2Id)).isTrue();
+    }
+
+    @Test
+    public void testKickMemberSuccess() {
+        ChatGroup group = chatService.createGroup("Kick Group", ownerId, Arrays.asList(member1Id));
+        
+        chatService.kickMember(group.getId(), ownerId, member1Id);
+        
+        assertThat(chatGroupMemberRepository.existsByGroupIdAndUserId(group.getId(), member1Id)).isFalse();
+    }
+
+    @Test
+    public void testKickMemberThrowsIfTargetIsAdmin() {
+        ChatGroup group = chatService.createGroup("Kick Admin Group", ownerId, Arrays.asList(member1Id));
+        chatService.makeAdmin(group.getId(), ownerId, member1Id);
+        
+        assertThrows(IllegalStateException.class, () -> {
+            chatService.kickMember(group.getId(), ownerId, member1Id);
+        });
+    }
+
+    @Test
+    public void testMakeAdmin() {
+        ChatGroup group = chatService.createGroup("Make Admin Group", ownerId, Arrays.asList(member1Id));
+        
+        chatService.makeAdmin(group.getId(), ownerId, member1Id);
+        
+        ChatGroupMember member = chatGroupMemberRepository.findByGroupIdAndUserId(group.getId(), member1Id).orElse(null);
+        assertThat(member).isNotNull();
+        assertThat(member.getRole()).isEqualTo("owner");
+    }
+
+    @Test
+    public void testResignAdminSuccess() {
+        ChatGroup group = chatService.createGroup("Resign Admin Group", ownerId, Arrays.asList(member1Id));
+        chatService.makeAdmin(group.getId(), ownerId, member1Id);
+        
+        chatService.resignAdmin(group.getId(), ownerId);
+        
+        ChatGroupMember ownerMember = chatGroupMemberRepository.findByGroupIdAndUserId(group.getId(), ownerId).orElse(null);
+        assertThat(ownerMember).isNotNull();
+        assertThat(ownerMember.getRole()).isEqualTo("member");
+    }
+
+    @Test
+    public void testResignAdminThrowsIfLastAdmin() {
+        ChatGroup group = chatService.createGroup("Resign Fail Group", ownerId, Arrays.asList(member1Id));
+        
+        assertThrows(IllegalStateException.class, () -> {
+            chatService.resignAdmin(group.getId(), ownerId);
+        });
+    }
+
+    @Test
+    public void testLeaveGroupSuccess() {
+        ChatGroup group = chatService.createGroup("Leave Group", ownerId, Arrays.asList(member1Id));
+        chatService.makeAdmin(group.getId(), ownerId, member1Id);
+        
+        chatService.leaveGroup(group.getId(), ownerId);
+        
+        assertThat(chatGroupMemberRepository.existsByGroupIdAndUserId(group.getId(), ownerId)).isFalse();
+        ChatGroup updatedGroup = chatGroupRepository.findById(group.getId()).orElse(null);
+        assertThat(updatedGroup).isNotNull();
+        assertThat(updatedGroup.getCreatedBy()).isEqualTo(member1Id); // Ownership transferred
+    }
+
+    @Test
+    public void testLeaveGroupThrowsIfLastAdmin() {
+        ChatGroup group = chatService.createGroup("Leave Fail Group", ownerId, Arrays.asList(member1Id));
+        
+        assertThrows(IllegalStateException.class, () -> {
+            chatService.leaveGroup(group.getId(), ownerId);
+        });
+    }
+
+    @Test
+    public void testLeaveGroupDeletesIfLastMember() {
+        ChatGroup group = chatService.createGroup("Leave Delete Group", ownerId, null);
+        
+        chatService.leaveGroup(group.getId(), ownerId);
+        
+        assertThat(chatGroupRepository.findById(group.getId())).isEmpty();
     }
 }
