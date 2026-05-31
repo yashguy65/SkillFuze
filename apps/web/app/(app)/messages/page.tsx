@@ -368,7 +368,7 @@ function MessagesContent() {
         adminIds: t.adminIds ? t.adminIds.map(id => id.toString()) : [],
         memberNames: t.memberIds ? t.memberIds.map(id => userName(id.toString(), chatProfilesRef.current)) : [],
         lastReadAt: t.lastReadAt,
-        isOwner: t.isOwner,
+        isOwner: t.isOwner !== undefined ? t.isOwner : (t as unknown as { owner?: boolean }).owner,
         ownerId: t.ownerId ? t.ownerId.toString() : undefined,
         lastMessage: lastMessageText,
         lastMessageTime: lastMessageObj ? lastMessageObj.timestamp : undefined,

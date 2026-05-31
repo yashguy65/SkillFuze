@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,6 +31,9 @@ public class ChatThreadSummary {
     private List<UUID> adminIds;
     private List<String> memberNames;
     private Instant lastReadAt;
+    
+    @JsonProperty("isOwner")
     private boolean isOwner;
+    
     private UUID ownerId;
 }
