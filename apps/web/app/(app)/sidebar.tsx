@@ -33,9 +33,9 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   ]
 
   return (
-    <aside className="w-20 border-r border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-col items-center py-6 sticky top-0 h-screen z-40">
+    <aside className="w-full h-16 border-t border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-row items-center justify-between px-6 z-40 md:sticky md:top-0 md:bottom-auto md:w-20 md:h-screen md:border-r md:border-t-0 md:flex-col md:py-6 md:px-0 md:justify-start md:gap-8">
       {/* Logo / Brand mark */}
-      <Link href="/dashboard" className="mb-8 shrink-0">
+      <Link href="/dashboard" className="mb-8 shrink-0 hidden md:block">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform hover:scale-110 active:scale-95 overflow-hidden">
           <Image
             src="/favicon.png"
@@ -48,7 +48,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
       </Link>
 
       {/* Nav */}
-      <nav className="flex-1 flex flex-col gap-2">
+      <nav className="flex flex-row md:flex-col items-center justify-around md:justify-start gap-1 md:gap-2 flex-1 md:flex-initial w-full md:w-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           return (
@@ -71,7 +71,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
               )}
 
               {/* Tooltip */}
-              <span className="absolute left-full ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+              <span className="absolute bottom-full mb-3 md:bottom-auto md:left-full md:ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
                 {item.label}
                 {item.badge != null && item.badge > 0 && (
                   <span className="ml-1 text-red-400">({item.badge})</span>
@@ -80,11 +80,48 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
             </Link>
           )
         })}
+
+        {/* User menu (mobile) */}
+        <div className="relative md:hidden ml-2">
+          {dropdownOpen && (
+            <div className="absolute bottom-full right-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-48 shadow-xl animate-in fade-in slide-in-from-bottom-2">
+              <div className="px-3 py-2 border-b border-slate-800 mb-2">
+                <p className="text-xs font-semibold text-slate-400">Signed in as</p>
+                <p className="text-sm font-bold truncate">{username}</p>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-slate-950 hover:ring-teal-500/50 transition-all uppercase overflow-hidden"
+          >
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt={username}
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              username.charAt(username.startsWith('@') ? 1 : 0)
+            )}
+          </button>
+        </div>
       </nav>
 
 
-      {/* User menu */}
-      <div className="relative">
+      {/* User menu (desktop) */}
+      <div className="relative hidden md:block md:mt-auto">
         {dropdownOpen && (
           <div className="absolute bottom-full left-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-48 shadow-xl animate-in fade-in slide-in-from-bottom-2">
             <div className="px-3 py-2 border-b border-slate-800 mb-2">

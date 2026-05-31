@@ -195,11 +195,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
-      <main className="flex flex-col md:flex-row w-full h-full overflow-hidden">
+    <div className="h-full w-full flex overflow-hidden bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
+      <main className="flex flex-col md:flex-row w-full h-full overflow-y-auto md:overflow-hidden">
 
         {/* Left Column (Username, Avatar, Links) */}
-        <aside className="w-full md:w-64 lg:w-72 shrink-0 bg-slate-900/70 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col items-center px-6 pt-12 pb-8 gap-4 h-full overflow-hidden">
+        <aside className="w-full md:w-64 lg:w-72 shrink-0 bg-slate-900/70 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col items-center px-6 pt-12 pb-8 gap-4 h-auto md:h-full overflow-hidden">
           {/* Header */}
           <h1 className="text-2xl font-bold tracking-tight w-full text-center truncate">@{handle}</h1>
 
@@ -228,7 +228,7 @@ export default function ProfilePage() {
         </aside>
 
         {/* Right Column */}
-        <section className="flex-1 h-full overflow-y-auto p-8 lg:p-12">
+        <section className="flex-1 h-auto md:h-full md:overflow-y-auto p-8 lg:p-12">
 
           {/* ── Bio Section ───────────────────────────────────── */}
           <div className="w-full mb-8">

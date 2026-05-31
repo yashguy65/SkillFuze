@@ -424,7 +424,7 @@ export default function Dashboard() {
   }, [userId, customTags, searchQuery])
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
+    <div className="flex h-full w-full bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
       {/* User detail modal */}
       {selectedUser && <UserModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
       {/* Match detail modal */}
@@ -432,9 +432,9 @@ export default function Dashboard() {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-        <header className="flex justify-between items-center px-8 py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10">
+        <header className="flex justify-between items-center px-4 py-4 md:px-8 md:py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10">
           <div className="w-10" />
-          <h1 className="text-5xl tracking-tighter text-white">Dashboard</h1>
+          <h1 className="text-3xl md:text-5xl tracking-tighter text-white">Dashboard</h1>
           <div className="flex items-center gap-4 relative">
             <button
               onClick={() => setIsActivityOpen((open) => !open)}

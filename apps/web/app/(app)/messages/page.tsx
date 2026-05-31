@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Send, Search, Check, CheckCheck, MessageSquare, Users, X } from 'lucide-react'
+import { Send, Search, Check, CheckCheck, MessageSquare, Users, X, ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '../notifications-context'
@@ -1027,7 +1027,7 @@ function MessagesContent() {
 
   return (
     <div className="flex h-full bg-slate-950 text-slate-200 overflow-hidden shadow-2xl">
-      <div className="w-80 shrink-0 border-r border-slate-800 flex flex-col bg-slate-900/50">
+      <div className={`w-full md:w-80 shrink-0 border-r border-slate-800 flex flex-col bg-slate-900/50 ${selectedChatId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-slate-800">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Chat</h2>
@@ -1098,9 +1098,22 @@ function MessagesContent() {
       </div>
 
       {selectedChat ? (
-        <div className="flex-1 flex flex-col bg-slate-950 relative">
+        <div className={`flex-1 flex flex-col bg-slate-950 relative ${selectedChatId ? 'flex' : 'hidden md:flex'}`}>
           <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm z-10">
             <div className="flex items-center gap-3 min-w-0">
+              {selectedChatId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedChatId(null)
+                    window.history.replaceState(null, '', '/messages')
+                  }}
+                  className="md:hidden p-1 mr-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  aria-label="Back to chat list"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+              )}
               <div className="relative shrink-0">
                 {selectedChat.kind === 'group' ? (
                   <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
@@ -1219,7 +1232,7 @@ function MessagesContent() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500">
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500 hidden md:flex">
           <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
           <p className="text-lg font-medium text-slate-400">Your Messages</p>
           <p className="text-sm mt-1">Select a chat or start a new conversation</p>
