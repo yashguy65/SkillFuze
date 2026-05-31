@@ -4,6 +4,7 @@ from schemas.ingest import GitHubIngestRequest, IngestResponse, PurgeRequest, Pu
 from parsers.github_parser import GitHubParser
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
+from pipelines.redis_client import cache_delete, cache_delete_pattern
 
 router = APIRouter()
 
@@ -64,11 +65,19 @@ async def ingest_github_data(request: GitHubIngestRequest):
         res = supabase.table("github_chunks").insert(rows).execute()
         chunks_stored = len(rows)  # res.data might be empty depending on Supabase version
         print(f"Successfully inserted {chunks_stored} chunks into Supabase, tags: {extracted_tags}")
+        _invalidate_user_cache(request.user_id)
     except Exception as e:
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
     
     return IngestResponse(chunks_stored=chunks_stored, extracted_tags=extracted_tags)
+
+
+def _invalidate_user_cache(user_id: str) -> None:
+    """Clear all Redis entries that depend on a user's profile data."""
+    cache_delete(f"embed:{user_id}")
+    cache_delete_pattern(f"match:{user_id}:*")
+    cache_delete("discover:all")
 
 @router.post("/ingest/purge", response_model=PurgeResponse)
 async def purge_user_data(request: PurgeRequest):
@@ -77,6 +86,7 @@ async def purge_user_data(request: PurgeRequest):
         res = supabase.table("github_chunks").delete().eq("user_id", request.user_id).execute()
         # Suppress type errors for data count if needed, or just assume it works.
         deleted_count = len(res.data) if res.data else 0
+        _invalidate_user_cache(request.user_id)
         return PurgeResponse(success=True, chunks_deleted=deleted_count)
     except Exception as e:
         print("Supabase Error during purge:", str(e))

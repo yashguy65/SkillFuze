@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from schemas.tags import TagsIngestRequest, TagsIngestResponse
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
+from pipelines.redis_client import cache_delete, cache_delete_pattern
 
 router = APIRouter()
 
@@ -12,6 +13,8 @@ async def ingest_tags(request: TagsIngestRequest):
         supabase = get_supabase()
         try:
             supabase.table("github_chunks").delete().eq("user_id", request.user_id).eq("repo_name", "custom_tags").execute()
+            cache_delete(f"embed:{request.user_id}")
+            cache_delete_pattern(f"match:{request.user_id}:*")
             return TagsIngestResponse(success=True, chunks_stored=0)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
@@ -41,6 +44,9 @@ async def ingest_tags(request: TagsIngestRequest):
         # Insert new custom_tags chunk
         supabase.table("github_chunks").insert([row]).execute()
         chunks_stored = 1
+        # Invalidate caches so the next match call picks up new tags
+        cache_delete(f"embed:{request.user_id}")
+        cache_delete_pattern(f"match:{request.user_id}:*")
     except Exception as e:
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")

@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { cacheGet, cacheSet } from '@/lib/redis'
 
 export const dynamic = 'force-dynamic'
 
+const DISCOVER_KEY = 'discover:all'
+const DISCOVER_TTL = 120 // 2 minutes
+
 export async function GET() {
+  // ── Cache check ────────────────────────────────────────────────────────────
+  const cached = await cacheGet<Record<string, unknown>[]>(DISCOVER_KEY)
+  if (cached) {
+    return NextResponse.json({ users: cached })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY! // service role key
   const supabase = createClient(supabaseUrl, supabaseKey)
@@ -34,7 +44,7 @@ export async function GET() {
     })
 
     const discoverUsers = authData.users.map((u) => {
-      // Get top 3-5 skills
+      // Get top skills
       const skillCounts = userSkills[u.id] || {}
       const sortedSkills = Object.entries(skillCounts)
         .sort((a, b) => b[1] - a[1])
@@ -45,7 +55,7 @@ export async function GET() {
       const finalSkills = sortedSkills.length > 0 ? sortedSkills : fallbackSkills
 
       return {
-        id: u.id, // Using string id instead of number now
+        id: u.id,
         username: u.user_metadata?.user_name || u.email?.split('@')[0] || 'user',
         bio: u.user_metadata?.bio || '',
         skills: finalSkills,
@@ -53,6 +63,9 @@ export async function GET() {
         preference: u.user_metadata?.preference || 'Just exploring'
       }
     })
+
+    // ── Populate cache ─────────────────────────────────────────────────────
+    await cacheSet(DISCOVER_KEY, discoverUsers, DISCOVER_TTL)
 
     return NextResponse.json({ users: discoverUsers })
   } catch (error: unknown) {

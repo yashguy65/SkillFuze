@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from collections import Counter
@@ -8,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from schemas.match import MatchRequest, MatchResponse, MatchResult
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
+from pipelines.redis_client import cache_get, cache_set
 
 router = APIRouter()
 
@@ -96,50 +98,76 @@ async def match_users(request: MatchRequest):
     embedder = get_embedder()
     supabase = get_supabase()
 
+    # ── 0. Full match result cache ─────────────────────────────────────────
+    is_profile_only = not request.search_query and not request.custom_tags
+    _query_hash_src = json.dumps(
+        {"q": request.search_query or "", "tags": sorted(request.custom_tags or [])},
+        sort_keys=True,
+    ).encode()
+    query_hash = hashlib.sha256(_query_hash_src).hexdigest()[:16]
+    match_cache_key = f"match:{request.user_id}:{query_hash}"
+
+    cached_result = cache_get(match_cache_key)
+    if cached_result is not None:
+        return MatchResponse(matches=[MatchResult(**m) for m in cached_result])
+
     # ── 1. Build query embedding from the user's OWN data ──────────────────
-    try:
-        user_chunks = (
-            supabase.table("github_chunks")
-            .select("embedding, content, metadata")
-            .eq("user_id", request.user_id)
-            .execute()
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Supabase error: {e}")
+    # Check embedding cache first (only meaningful for profile-only queries)
+    embed_cache_key = f"embed:{request.user_id}"
+    query_embedding = None
+    if is_profile_only:
+        cached_embed = cache_get(embed_cache_key)
+        if cached_embed is not None:
+            query_embedding = np.array(cached_embed)
 
-    # Parse existing embeddings for this user
-    parsed_embeddings = []
-    weights = []
-    for row in user_chunks.data or []:
-        emb = row.get("embedding")
-        meta = row.get("metadata", {})
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta)
-            except Exception:
-                meta = {}
-
-        weight = 1.0
-        if meta.get("repo") == "profile":
-            weight = 2.0
-        elif meta.get("repo") == "linkedin_profile":
-            weight = 3.0
-        elif meta.get("source") == "github":
-            stars = meta.get("stars", 0)
-            weight += np.log1p(stars) * 0.5
-
-        if emb:
-            parsed_embeddings.append(
-                json.loads(emb) if isinstance(emb, str) else emb
+    if query_embedding is None:
+        try:
+            user_chunks = (
+                supabase.table("github_chunks")
+                .select("embedding, content, metadata")
+                .eq("user_id", request.user_id)
+                .execute()
             )
-            weights.append(weight)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Supabase error: {e}")
 
-    if parsed_embeddings:
-        query_embedding = np.average(parsed_embeddings, axis=0, weights=weights)
-    else:
-        query_embedding = np.array(
-            embedder.embed_query("software developer programmer")
-        )
+        # Parse existing embeddings for this user
+        parsed_embeddings = []
+        weights = []
+        for row in user_chunks.data or []:
+            emb = row.get("embedding")
+            meta = row.get("metadata", {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except Exception:
+                    meta = {}
+
+            weight = 1.0
+            if meta.get("repo") == "profile":
+                weight = 2.0
+            elif meta.get("repo") == "linkedin_profile":
+                weight = 3.0
+            elif meta.get("source") == "github":
+                stars = meta.get("stars", 0)
+                weight += np.log1p(stars) * 0.5
+
+            if emb:
+                parsed_embeddings.append(
+                    json.loads(emb) if isinstance(emb, str) else emb
+                )
+                weights.append(weight)
+
+        if parsed_embeddings:
+            query_embedding = np.average(parsed_embeddings, axis=0, weights=weights)
+        else:
+            query_embedding = np.array(
+                embedder.embed_query("software developer programmer")
+            )
+
+        # Cache the raw profile embedding (before tag/search overrides)
+        if is_profile_only:
+            cache_set(embed_cache_key, query_embedding.tolist(), ttl=600)
 
     # ── 2. Blend custom tags into the query if provided ────────────────────
     if request.custom_tags:
@@ -206,23 +234,33 @@ async def match_users(request: MatchRequest):
     # ── 5. Look up github_username & skills for each matched user ──────────
     matched_uids = list(user_best.keys())
 
-    try:
-        meta_res = (
-            supabase.table("github_chunks")
-            .select("user_id, metadata")
-            .in_("user_id", matched_uids)
-            .execute()
-        )
-    except Exception:
-        meta_res = type("R", (), {"data": []})(  # type: ignore[misc]
-        )
+    # Metadata aggregation cache (keyed by sorted uid set)
+    _uid_hash = hashlib.sha256(",".join(sorted(matched_uids)).encode()).hexdigest()[:16]
+    meta_cache_key = f"meta:{_uid_hash}"
+    _cached_meta = cache_get(meta_cache_key)
+
+    if _cached_meta is not None:
+        meta_rows = _cached_meta
+    else:
+        try:
+            meta_res = (
+                supabase.table("github_chunks")
+                .select("user_id, metadata")
+                .in_("user_id", matched_uids)
+                .execute()
+            )
+        except Exception:
+            meta_res = type("R", (), {"data": []})(  # type: ignore[misc]
+            )
+        meta_rows = meta_res.data or []
+        cache_set(meta_cache_key, meta_rows, ttl=900)
 
     # Aggregate github_username, languages, and total stars per user
     username_map: dict[str, str] = {}
     skills_map: dict[str, Counter] = {}
     total_stars_map: dict[str, int] = {}
 
-    for row in meta_res.data or []:
+    for row in meta_rows:
         uid = row["user_id"]
         meta = row.get("metadata") or {}
         if isinstance(meta, str):
@@ -341,5 +379,9 @@ async def match_users(request: MatchRequest):
 
     results.sort(key=lambda r: r.similarity, reverse=True)
     results = results[: request.top_k or 5]
+
+    # Cache the final results
+    match_ttl = 900 if is_profile_only else 300  # 15 min profile-only, 5 min search
+    cache_set(match_cache_key, [r.model_dump() for r in results], ttl=match_ttl)
 
     return MatchResponse(matches=results)

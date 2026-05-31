@@ -4,6 +4,7 @@ from parsers.linkedin_parser import LinkedInParser
 from pipelines.embedder import get_embedder
 from pipelines.supabase_client import get_supabase
 from langchain_core.documents import Document
+from pipelines.redis_client import cache_delete, cache_delete_pattern
 
 router = APIRouter()
 
@@ -52,6 +53,8 @@ async def ingest_linkedin_data(
         supabase.table("github_chunks").insert(rows).execute()
         chunks_stored = len(rows)
         print(f"Successfully inserted {chunks_stored} LinkedIn chunks into Supabase")
+        cache_delete(f"embed:{user_id}")
+        cache_delete_pattern(f"match:{user_id}:*")
     except Exception as e:
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
@@ -114,6 +117,8 @@ async def ingest_linkedin_profile(payload: LinkedInProfileRequest):
             .execute()
         supabase.table("github_chunks").insert(rows).execute()
         print(f"Inserted LinkedIn profile identity chunk for user {user_id}")
+        cache_delete(f"embed:{user_id}")
+        cache_delete_pattern(f"match:{user_id}:*")
     except Exception as e:
         print("Supabase Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
