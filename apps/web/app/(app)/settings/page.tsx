@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
 import { syncGitHub, syncLinkedIn, purgeData } from '@/lib/ai-service'
 import { useNotifications } from '../notifications-context'
-import { GitBranch, CheckCircle2, Loader2, RefreshCw, FileUp, Bell, Shield, Trash2 } from 'lucide-react'
+import { GitBranch, CheckCircle2, Loader2, RefreshCw, FileUp, Bell, Shield, Trash2, Sun, Moon, Monitor } from 'lucide-react'
 
 type SyncStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [purgeMessage, setPurgeMessage] = useState('')
 
   const { pushEnabled, pushSupported, requestPush } = useNotifications()
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     const supabase = createClient()
@@ -60,6 +62,12 @@ export default function SettingsPage() {
       </div>
     )
   }
+
+  const themeOptions = [
+    { value: 'light', label: 'Light', icon: Sun, color: 'text-amber-400' },
+    { value: 'dark', label: 'Dark', icon: Moon, color: 'text-blue-400' },
+    { value: 'system', label: 'System', icon: Monitor, color: 'text-teal-400' },
+  ] as const
 
   const githubUsername = user.user_metadata?.user_name
 
@@ -192,13 +200,46 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="h-full p-8 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 overflow-y-auto pb-24">
+    <div className="h-full p-8 bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 overflow-y-auto pb-24 transition-colors duration-200">
       <div className="max-w-2xl mx-auto space-y-8">
         
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Settings</h1>
           <p className="text-slate-400">Manage your data, privacy, and notifications.</p>
         </div>
+
+        {/* ── Appearance ──────────────────────────────────────────────────── */}
+        <section className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
+              <Sun className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Appearance</h2>
+              <p className="text-sm text-slate-400">Choose your preferred colour scheme.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {themeOptions.map(({ value, label, icon: Icon, color }) => {
+              const isActive = theme === value
+              return (
+                <button
+                  key={value}
+                  onClick={() => setTheme(value)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
+                    isActive
+                      ? 'bg-blue-500/10 border-blue-500/40 shadow-[0_0_0_2px_rgba(59,130,246,0.25)]'
+                      : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 ${isActive ? color : 'text-slate-500'}`} />
+                  <span className={`text-xs font-semibold ${isActive ? 'text-slate-100' : 'text-slate-500'}`}>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
 
         {/* ── Data & Integrations ────────────────────────────────────────── */}
         <section className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
@@ -214,7 +255,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             {/* GitHub Sync */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-950/50 border border-slate-800/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-950/50 border border-slate-800/80 transition-colors">
               <div>
                 <h3 className="font-medium text-slate-200 flex items-center gap-2">
                   <GitBranch className="w-4 h-4 text-slate-400" />

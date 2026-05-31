@@ -70,7 +70,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 transition-colors">
         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
       </div>
     )
@@ -195,7 +195,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="h-full w-full flex overflow-hidden bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
+    <div className="h-full w-full flex overflow-hidden bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 transition-colors duration-200">
       <main className="flex flex-col md:flex-row w-full h-full overflow-y-auto md:overflow-hidden">
 
         {/* Left Column (Username, Avatar, Links) */}
@@ -250,7 +250,7 @@ export default function ProfilePage() {
             </div>
 
             {isEditingBio ? (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4 transition-colors">
                 <div>
                   <textarea
                     value={editBioVal}
@@ -334,7 +334,7 @@ export default function ProfilePage() {
                   onKeyDown={e => e.key === 'Enter' && handleAddTag()}
                   autoFocus
                   placeholder="New custom tag..."
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500/50 text-slate-200"
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500/50 text-slate-200 transition-colors"
                 />
                 <button
                   onClick={handleAddTag}
@@ -369,7 +369,7 @@ export default function ProfilePage() {
                       {tag}
                       <button
                         onClick={() => handleRemoveTag(tag)}
-                        className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        className="absolute -top-1 -right-1 bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-50 hover:border-red-500/50 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                         aria-label={`Remove ${tag} tag`}
                       >
                         <X className="w-2.5 h-2.5" />

@@ -1019,18 +1019,18 @@ function MessagesContent() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full bg-slate-950 items-center justify-center">
+      <div className="flex h-full bg-slate-950 items-center justify-center transition-colors">
         <div className="animate-spin text-blue-500 w-8 h-8 border-4 border-current border-t-transparent rounded-full" />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full bg-slate-950 text-slate-200 overflow-hidden shadow-2xl">
+    <div className="flex h-full bg-slate-950 text-slate-200 overflow-hidden shadow-2xl transition-colors duration-200">
       <div className={`w-full md:w-80 shrink-0 border-r border-slate-800 flex flex-col bg-slate-900/50 ${selectedChatId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-slate-800">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white">Chat</h2>
+            <h2 className="text-xl font-bold text-slate-50">Chat</h2>
             <button
               type="button"
               onClick={() => setIsGroupModalOpen(true)}
@@ -1081,7 +1081,7 @@ function MessagesContent() {
                     <span className="text-xs text-slate-500 shrink-0">{chat.lastMessageTime}</span>
                   </div>
                   <div className="flex justify-between items-center gap-2">
-                    <p className={`text-sm truncate font-light ${chat.unreadCount > 0 ? 'text-white font-semibold' : 'text-slate-400'}`}>
+                    <p className={`text-sm truncate font-light ${chat.unreadCount > 0 ? 'text-slate-50 font-semibold' : 'text-slate-400'}`}>
                       {chat.lastMessage || (chat.kind === 'group' ? `${chat.memberIds?.length || 0} members` : 'New connection')}
                     </p>
                     {chat.unreadCount > 0 && (
@@ -1098,7 +1098,7 @@ function MessagesContent() {
       </div>
 
       {selectedChat ? (
-        <div className={`flex-1 flex flex-col bg-slate-950 relative ${selectedChatId ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`flex-1 flex flex-col bg-slate-950 relative ${selectedChatId ? 'flex' : 'hidden md:flex'} transition-colors`}>
           <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm z-10">
             <div className="flex items-center gap-3 min-w-0">
               {selectedChatId && (
@@ -1131,7 +1131,7 @@ function MessagesContent() {
                   <button
                     type="button"
                     onClick={() => setIsParticipantsModalOpen(true)}
-                    className="font-medium text-white hover:text-blue-400 transition-colors text-left flex flex-col cursor-pointer"
+                    className="font-medium text-slate-50 hover:text-blue-400 transition-colors text-left flex flex-col cursor-pointer"
                   >
                     <span className="truncate">{selectedChat.name}</span>
                     <span className="text-xs text-slate-500 font-normal hover:underline">
@@ -1139,7 +1139,7 @@ function MessagesContent() {
                     </span>
                   </button>
                 ) : (
-                  <h3 className="font-medium text-white truncate">{selectedChat.name}</h3>
+                  <h3 className="font-medium text-slate-50 truncate">{selectedChat.name}</h3>
                 )}
               </div>
             </div>
@@ -1152,7 +1152,7 @@ function MessagesContent() {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0a0f1a]" style={{ scrollbarWidth: 'thin' }}>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950" style={{ scrollbarWidth: 'thin' }}>
             {selectedChat.messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500">
                 <p>Start the conversation with {selectedChat.name}</p>
@@ -1232,7 +1232,7 @@ function MessagesContent() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500 hidden md:flex">
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500 hidden md:flex transition-colors">
           <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
           <p className="text-lg font-medium text-slate-400">Your Messages</p>
           <p className="text-sm mt-1">Select a chat or start a new conversation</p>
@@ -1244,7 +1244,7 @@ function MessagesContent() {
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-zoom-in">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div>
-                <h3 className="text-white font-semibold">New group chat</h3>
+                <h3 className="text-slate-50 font-semibold">New group chat</h3>
                 <p className="text-xs text-slate-400 mt-1">{selectedMemberIds.size} selected</p>
               </div>
               <button
@@ -1311,7 +1311,7 @@ function MessagesContent() {
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-zoom-in">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div>
-                <h3 className="text-white font-semibold">Group participants</h3>
+                <h3 className="text-slate-50 font-semibold">Group participants</h3>
                 <p className="text-xs text-slate-400 mt-1">
                   {selectedChat.memberIds?.length || 0} members
                 </p>

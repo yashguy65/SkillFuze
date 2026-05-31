@@ -92,7 +92,7 @@ function UserModal({ user, onClose }: { user: DiscoverUser; onClose: () => void 
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200 transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -114,7 +114,7 @@ function UserModal({ user, onClose }: { user: DiscoverUser; onClose: () => void 
             )}
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">@{user.username}</h2>
+            <h2 className="text-2xl font-bold text-slate-50">@{user.username}</h2>
             {user.preference && (
               <span className="inline-flex items-center gap-1.5 mt-1 px-3 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-xs font-medium">
                 {user.preference}
@@ -276,7 +276,7 @@ function MatchModal({ match, discoverUsers, onClose }: { match: MatchResult; dis
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.7)] p-8 animate-in fade-in zoom-in-95 duration-200 transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -307,7 +307,7 @@ function MatchModal({ match, discoverUsers, onClose }: { match: MatchResult; dis
             )}
           </div>
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-white truncate">
+            <h2 className="text-2xl font-bold text-slate-50 truncate">
               {rawGithubUsername ? (
                 <a
                   href={`https://github.com/${rawGithubUsername}`}
@@ -424,7 +424,7 @@ export default function Dashboard() {
   }, [userId, customTags, searchQuery])
 
   return (
-    <div className="flex h-full w-full bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30">
+    <div className="flex h-full w-full bg-slate-950 text-slate-50 font-sans selection:bg-blue-500/30 transition-colors duration-200">
       {/* User detail modal */}
       {selectedUser && <UserModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
       {/* Match detail modal */}
@@ -432,9 +432,9 @@ export default function Dashboard() {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-        <header className="flex justify-between items-center px-4 py-4 md:px-8 md:py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10">
+        <header className="flex justify-between items-center px-4 py-4 md:px-8 md:py-6 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-10 transition-colors">
           <div className="w-10" />
-          <h1 className="text-3xl md:text-5xl tracking-tighter text-white">Dashboard</h1>
+          <h1 className="text-3xl md:text-5xl tracking-tighter text-slate-50">Dashboard</h1>
           <div className="flex items-center gap-4 relative">
             <button
               onClick={() => setIsActivityOpen((open) => !open)}

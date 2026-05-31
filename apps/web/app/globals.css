@@ -46,6 +46,18 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Adaptive slate palette — remapped per theme below */
+  --color-slate-50: var(--slate-50);
+  --color-slate-100: var(--slate-100);
+  --color-slate-200: var(--slate-200);
+  --color-slate-300: var(--slate-300);
+  --color-slate-400: var(--slate-400);
+  --color-slate-500: var(--slate-500);
+  --color-slate-600: var(--slate-600);
+  --color-slate-700: var(--slate-700);
+  --color-slate-800: var(--slate-800);
+  --color-slate-900: var(--slate-900);
+  --color-slate-950: var(--slate-950);
 }
 
 :root {
@@ -81,6 +93,19 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Light mode: slate inverted — dark numbers = light tones, light numbers = dark tones */
+  --slate-50:  #0f172a;   /* was 950 in dark */
+  --slate-100: #1e293b;   /* was 900 in dark */
+  --slate-200: #334155;   /* was 800 in dark */
+  --slate-300: #475569;   /* was 700 in dark */
+  --slate-400: #64748b;   /* was 600 in dark */
+  --slate-500: #94a3b8;   /* was 500 in dark */
+  --slate-600: #cbd5e1;   /* was 400 in dark */
+  --slate-700: #e2e8f0;   /* was 300 in dark */
+  --slate-800: #f1f5f9;   /* was 200 in dark */
+  --slate-900: #f8fafc;   /* was 100 in dark */
+  --slate-950: #f1f5f9;   /* lightest bg for light mode */
 }
 
 .dark {
@@ -115,6 +140,19 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Dark mode: standard Tailwind slate palette */
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
 }
 
 @layer base {
@@ -128,6 +166,14 @@
     @apply font-sans;
   }
 }
+
+/* Smooth theme transitions */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
 /* Hide scrollbars globally (scrolling still works) */
 * {
   scrollbar-width: none;

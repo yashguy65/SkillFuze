@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, User, Settings, LogOut, MessageSquare } from 'lucide-react'
+import { Home, User, Settings, LogOut, MessageSquare, Sun, Moon } from 'lucide-react'
 import { useState } from 'react'
+import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from './notifications-context'
 
@@ -18,12 +19,17 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   const router = useRouter()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { totalUnread } = useNotifications()
+  const { theme, setTheme } = useTheme()
+
+  const isDark = theme === 'dark' || theme === undefined
 
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/')
   }
+
+  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
 
   const navItems = [
     { icon: Home, label: 'Home', href: '/dashboard' },
@@ -33,7 +39,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
   ]
 
   return (
-    <aside className="fixed bottom-0 left-0 right-0 w-full h-16 border-t border-slate-800/50 bg-slate-950/80 backdrop-blur-lg flex flex-row items-center justify-between px-6 z-40 md:sticky md:top-0 md:bottom-auto md:left-auto md:right-auto md:w-20 md:h-screen md:border-r md:border-t-0 md:flex-col md:py-6 md:px-0 md:justify-start md:gap-8">
+    <aside className="fixed bottom-0 left-0 right-0 w-full h-16 border-t border-slate-800/50 bg-slate-950/90 backdrop-blur-lg flex flex-row items-center justify-between px-6 z-40 md:sticky md:top-0 md:bottom-auto md:left-auto md:right-auto md:w-20 md:h-screen md:border-r md:border-t-0 md:flex-col md:py-6 md:px-0 md:justify-start md:gap-8 transition-colors duration-200">
       {/* Logo / Brand mark */}
       <Link href="/dashboard" className="mb-8 shrink-0 hidden md:block">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform hover:scale-110 active:scale-95 overflow-hidden">
@@ -57,7 +63,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
               href={item.href}
               className={`p-3 rounded-xl transition-all group relative ${isActive
                 ? 'bg-blue-500/10 text-blue-400'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
                 }`}
               title={item.label}
             >
@@ -71,7 +77,7 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
               )}
 
               {/* Tooltip */}
-              <span className="absolute bottom-full mb-3 md:bottom-auto md:left-full md:ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+              <span className="absolute bottom-full mb-3 md:bottom-auto md:left-full md:ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl text-slate-100">
                 {item.label}
                 {item.badge != null && item.badge > 0 && (
                   <span className="ml-1 text-red-400">({item.badge})</span>
@@ -84,11 +90,22 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
         {/* User menu (mobile) */}
         <div className="relative md:hidden ml-2">
           {dropdownOpen && (
-            <div className="absolute bottom-full right-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-48 shadow-xl animate-in fade-in slide-in-from-bottom-2">
+            <div className="absolute bottom-full right-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-52 shadow-xl animate-in fade-in slide-in-from-bottom-2">
               <div className="px-3 py-2 border-b border-slate-800 mb-2">
                 <p className="text-xs font-semibold text-slate-400">Signed in as</p>
-                <p className="text-sm font-bold truncate">{username}</p>
+                <p className="text-sm font-bold truncate text-slate-100">{username}</p>
               </div>
+
+              {/* Theme toggle (mobile) */}
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800/70 rounded-lg transition-colors"
+              >
+                {isDark
+                  ? <><Sun className="w-4 h-4 text-amber-400" /><span>Light Mode</span></>
+                  : <><Moon className="w-4 h-4 text-blue-400" /><span>Dark Mode</span></>
+                }
+              </button>
 
               <button
                 onClick={handleLogout}
@@ -120,13 +137,28 @@ export default function AppSidebar({ username, avatarUrl }: SidebarProps) {
       </nav>
 
 
+      {/* Theme toggle (desktop) */}
+      <button
+        onClick={toggleTheme}
+        title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        className="hidden md:flex p-3 rounded-xl text-slate-400 hover:bg-slate-800/70 hover:text-slate-100 transition-all group relative"
+      >
+        {isDark
+          ? <Sun className="w-5 h-5 text-amber-400" />
+          : <Moon className="w-5 h-5 text-blue-400" />
+        }
+        <span className="absolute bottom-auto left-full ml-3 px-2 py-1 bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl text-slate-100">
+          {isDark ? 'Light Mode' : 'Dark Mode'}
+        </span>
+      </button>
+
       {/* User menu (desktop) */}
-      <div className="relative hidden md:block md:mt-auto">
+      <div className="relative hidden md:block md:mt-2">
         {dropdownOpen && (
-          <div className="absolute bottom-full left-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-48 shadow-xl animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-full left-0 mb-4 bg-slate-900 border border-slate-800 rounded-xl p-2 w-52 shadow-xl animate-in fade-in slide-in-from-bottom-2">
             <div className="px-3 py-2 border-b border-slate-800 mb-2">
               <p className="text-xs font-semibold text-slate-400">Signed in as</p>
-              <p className="text-sm font-bold truncate">{username}</p>
+              <p className="text-sm font-bold truncate text-slate-100">{username}</p>
             </div>
 
             <button
