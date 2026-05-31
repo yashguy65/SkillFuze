@@ -17,8 +17,21 @@ export async function handleProxy(req: NextRequest, props: RouteParams) {
   const { search } = req.nextUrl
   const url = `${springBootUrl}/api/chat/${joinedPath}${search}`
   
-  const headers = new Headers(req.headers)
-  headers.delete('host')
+  console.log(`[Proxy] Forwarding ${req.method} request to: ${url}`)
+  
+  const headers = new Headers()
+  const auth = req.headers.get('authorization')
+  if (auth) {
+    headers.set('authorization', auth)
+  }
+  const contentType = req.headers.get('content-type')
+  if (contentType) {
+    headers.set('content-type', contentType)
+  }
+  const accept = req.headers.get('accept')
+  if (accept) {
+    headers.set('accept', accept)
+  }
   
   const requestOptions: RequestInit = {
     method: req.method,

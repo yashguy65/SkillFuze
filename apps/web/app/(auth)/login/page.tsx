@@ -1,8 +1,16 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const router = useRouter()
+
   const signInWithGithub = async () => {
     const supabase = createClient()
     await supabase.auth.signInWithOAuth({
@@ -37,6 +45,23 @@ export default function LoginPage() {
     })
   }
 
+  const signInWithEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setErrorMsg(null)
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (error) {
+      setErrorMsg(error.message)
+      setLoading(false)
+    } else {
+      router.push('/dashboard')
+    }
+  }
+
   return (
     <div
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
@@ -49,19 +74,26 @@ export default function LoginPage() {
       <div className="w-full max-w-md px-4 relative z-10">
         {/* Logo / Brand */}
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-semibold mt-3 mb-1" style={{ color: '#ffffffff' }}>
+          <h1 className="text-4xl font-semibold mt-3 mb-1" style={{ color: '#ffffff' }}>
             Welcome to SkillFuze!
           </h1>
-
         </div>
 
         <div className="rounded-xl p-8" style={{ backgroundColor: '#1A1F2E', border: '1px solid #2D3748' }}>
-          <p className="text-s text-center " style={{ color: '#9CA3AF' }}>
+          <p className="text-sm text-center mb-6" style={{ color: '#9CA3AF' }}>
             Sign in to continue to your dashboard
-          </p><br />
+          </p>
+
+          {errorMsg && (
+            <div className="mb-4 p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
+              {errorMsg}
+            </div>
+          )}
+
           {/* GitHub Button */}
           <button
             id="login-github-btn"
+            disabled={loading}
             onClick={signInWithGithub}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all mb-4"
             style={{ backgroundColor: '#24292F', color: '#FFFFFF', border: '1px solid #444C56', cursor: 'pointer' }}
@@ -75,6 +107,7 @@ export default function LoginPage() {
           {/* Google Button */}
           <button
             id="login-google-btn"
+            disabled={loading}
             onClick={signInWithGoogle}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all mb-4"
             style={{ backgroundColor: '#24292F', color: '#FFFFFF', border: '1px solid #444C56', cursor: 'pointer' }}
@@ -88,8 +121,9 @@ export default function LoginPage() {
           {/* LinkedIn Button */}
           <button
             id="login-linkedin-btn"
+            disabled={loading}
             onClick={signInWithLinkedin}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all mb-6"
             style={{ backgroundColor: '#0A66C2', color: '#FFFFFF', border: '1px solid #004182', cursor: 'pointer' }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#004182')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#0A66C2')}
@@ -97,6 +131,48 @@ export default function LoginPage() {
             <LinkedinIcon className="w-5 h-5" />
             Continue with LinkedIn
           </button>
+
+          <div className="flex items-center my-6">
+            <div className="flex-1 border-t" style={{ borderColor: '#2D3748' }}></div>
+            <span className="px-3 text-xs" style={{ color: '#4B5563' }}>OR</span>
+            <div className="flex-1 border-t" style={{ borderColor: '#2D3748' }}></div>
+          </div>
+
+          {/* Email Form */}
+          <form onSubmit={signInWithEmail} className="space-y-4 mb-6">
+            <div>
+              <label className="block text-xs font-semibold mb-1" style={{ color: '#9CA3AF' }}>Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 rounded bg-slate-800 border text-white text-sm"
+                style={{ borderColor: '#334155' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1" style={{ color: '#9CA3AF' }}>Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 rounded bg-slate-800 border text-white text-sm"
+                style={{ borderColor: '#334155' }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded font-semibold text-sm transition-all"
+              style={{ backgroundColor: '#3b82f6', color: '#ffffff', cursor: 'pointer' }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2563eb')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#3b82f6')}
+            >
+              {loading ? 'Signing in...' : 'Sign In with Email'}
+            </button>
+          </form>
         </div>
 
         {/* Footer */}

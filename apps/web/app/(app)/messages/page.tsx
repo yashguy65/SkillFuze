@@ -209,6 +209,7 @@ function MessagesContent() {
   const [isDeletingGroup, setIsDeletingGroup] = useState(false)
   const [discoverUsers, setDiscoverUsers] = useState<DiscoverUser[]>([])
   const [allUsers, setAllUsers] = useState<DiscoverUser[]>([])
+  const [isConnected, setIsConnected] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
@@ -220,6 +221,7 @@ function MessagesContent() {
   const chatProfilesRef = useRef<Map<string, DiscoverUser>>(new Map())
   const groupIdsRef = useRef<Set<string>>(new Set())
   const chatsRef = useRef<Chat[]>([])
+  const groupSubscriptionsRef = useRef<Map<string, { unsubscribe: () => void }>>(new Map())
 
   const chatPartners = useMemo(() => {
     const directChatUserIds = new Set(
@@ -404,6 +406,97 @@ function MessagesContent() {
     }
   }, [markDirectRead, markGroupRead])
 
+  const syncGroupSubscriptions = useCallback((client: Client | null, currentChats: Chat[]) => {
+    if (!client || !client.connected) return
+    const myId = currentUserIdRef.current
+    if (!myId) return
+
+    // Find all group chat IDs
+    const currentGroupChats = currentChats.filter((chat) => chat.kind === 'group')
+    const activeGroupIds = new Set(currentGroupChats.map((chat) => chat.groupId).filter(Boolean) as string[])
+
+    // Unsubscribe from any groups that are no longer present
+    groupSubscriptionsRef.current.forEach((sub, groupId) => {
+      if (!activeGroupIds.has(groupId)) {
+        try {
+          sub.unsubscribe()
+        } catch (e) {
+          console.error('[STOMP] Failed to unsubscribe from group:', groupId, e)
+        }
+        groupSubscriptionsRef.current.delete(groupId)
+      }
+    })
+
+    // Subscribe to new groups
+    currentGroupChats.forEach((chat) => {
+      const groupId = chat.groupId
+      if (!groupId || groupSubscriptionsRef.current.has(groupId)) return
+
+      console.log('[STOMP] Subscribing to group:', groupId)
+      try {
+        const sub = client.subscribe(`/topic/groups/${groupId}`, (message) => {
+          const newMsg = JSON.parse(message.body) as DbGroupMessage
+          const senderId = newMsg.sender_id ?? newMsg.senderId
+          const msgGroupId = newMsg.group_id ?? newMsg.groupId
+
+          if (!senderId || !msgGroupId) return
+
+          const msgId = newMsg.id
+          const msgText = newMsg.text
+          const msgCreatedAt = newMsg.created_at ?? newMsg.createdAt
+          const chatId = `group_${msgGroupId}`
+          const isOpen = selectedChatIdRef.current === chatId
+          const formattedMessage = toGroupMessage(newMsg, chatProfilesRef.current)
+
+          setChats((prevChats) => {
+            const existingChat = prevChats.find((c) => c.kind === 'group' && c.groupId === msgGroupId)
+            if (!existingChat || existingChat.messages.some((msg) => msg.id === msgId)) return prevChats
+
+            const tempIndex = existingChat.messages.findIndex(
+              (msg) => msg.id.startsWith('temp_') && msg.text === msgText && msg.senderId === senderId
+            )
+
+            const messages = [...existingChat.messages]
+            if (tempIndex !== -1) {
+              messages[tempIndex] = formattedMessage
+            } else {
+              messages.push(formattedMessage)
+            }
+
+            const nextLastReadAt = isOpen ? new Date().toISOString() : existingChat.lastReadAt
+            const updatedChat: Chat = {
+              ...existingChat,
+              messages,
+              lastMessage: `${formattedMessage.senderName}: ${formattedMessage.text}`,
+              lastMessageTime: formattedMessage.timestamp,
+              lastActivityAt: msgCreatedAt,
+              lastReadAt: nextLastReadAt,
+              unreadCount: isOpen ? 0 : countGroupUnread(messages, myId, existingChat.lastReadAt)
+            }
+
+            const withoutUpdated = prevChats.filter((c) => c.id !== chatId)
+            return sortChats([updatedChat, ...withoutUpdated])
+          })
+
+          if (isOpen) {
+            void markGroupRead(msgGroupId)
+          } else {
+            void refreshUnreadCount()
+          }
+        })
+        groupSubscriptionsRef.current.set(groupId, sub)
+      } catch (e) {
+        console.error('[STOMP] Failed to subscribe to group:', groupId, e)
+      }
+    })
+  }, [markGroupRead, refreshUnreadCount])
+
+  useEffect(() => {
+    if (isConnected && stompClientRef.current) {
+      syncGroupSubscriptions(stompClientRef.current, chats)
+    }
+  }, [chats, isConnected, syncGroupSubscriptions])
+
   useEffect(() => {
     let cancelled = false
     let stompClient: Client | null = null
@@ -458,6 +551,10 @@ function MessagesContent() {
             return
           }
           console.log('[STOMP] Connected to Spring Boot chat socket')
+          setIsConnected(true)
+
+          // Clear local cache of subscriptions on new connection
+          groupSubscriptionsRef.current.clear()
 
           stompClient?.subscribe('/user/queue/messages', (message) => {
             const newMsg = JSON.parse(message.body) as DbMessage
@@ -528,58 +625,16 @@ function MessagesContent() {
             })
           })
 
-          groupIdsRef.current.forEach((groupId) => {
-            stompClient?.subscribe(`/topic/groups/${groupId}`, (message) => {
-              const newMsg = JSON.parse(message.body) as DbGroupMessage
-              const senderId = newMsg.sender_id ?? newMsg.senderId
-              const msgGroupId = newMsg.group_id ?? newMsg.groupId
+          // Subscribe to all current groups
+          syncGroupSubscriptions(stompClient, chatsRef.current)
+        }
 
-              if (!senderId || !msgGroupId) return
+        stompClient.onDisconnect = () => {
+          setIsConnected(false)
+        }
 
-              const msgId = newMsg.id
-              const msgText = newMsg.text
-              const msgCreatedAt = newMsg.created_at ?? newMsg.createdAt
-              const chatId = `group_${msgGroupId}`
-              const isOpen = selectedChatIdRef.current === chatId
-              const formattedMessage = toGroupMessage(newMsg, chatProfilesRef.current)
-
-              setChats((prevChats) => {
-                const existingChat = prevChats.find((chat) => chat.kind === 'group' && chat.groupId === msgGroupId)
-                if (!existingChat || existingChat.messages.some((msg) => msg.id === msgId)) return prevChats
-
-                const tempIndex = existingChat.messages.findIndex(
-                  (msg) => msg.id.startsWith('temp_') && msg.text === msgText && msg.senderId === senderId
-                )
-
-                const messages = [...existingChat.messages]
-                if (tempIndex !== -1) {
-                  messages[tempIndex] = formattedMessage
-                } else {
-                  messages.push(formattedMessage)
-                }
-
-                const nextLastReadAt = isOpen ? new Date().toISOString() : existingChat.lastReadAt
-                const updatedChat: Chat = {
-                  ...existingChat,
-                  messages,
-                  lastMessage: `${formattedMessage.senderName}: ${formattedMessage.text}`,
-                  lastMessageTime: formattedMessage.timestamp,
-                  lastActivityAt: msgCreatedAt,
-                  lastReadAt: nextLastReadAt,
-                  unreadCount: isOpen ? 0 : countGroupUnread(messages, myId, existingChat.lastReadAt)
-                }
-
-                const withoutUpdated = prevChats.filter((chat) => chat.id !== chatId)
-                return sortChats([updatedChat, ...withoutUpdated])
-              })
-
-              if (isOpen) {
-                void markGroupRead(msgGroupId)
-              } else {
-                void refreshUnreadCount()
-              }
-            })
-          })
+        stompClient.onWebSocketClose = () => {
+          setIsConnected(false)
         }
 
         stompClient.activate()
@@ -614,8 +669,9 @@ function MessagesContent() {
         stompClient.deactivate()
       }
       stompClientRef.current = null
+      setIsConnected(false)
     }
-  }, [loadChats, markDirectRead, markGroupRead, refreshUnreadCount, supabase])
+  }, [loadChats, markDirectRead, markGroupRead, refreshUnreadCount, supabase, syncGroupSubscriptions])
 
   useEffect(() => {
     if (!initialUserId || isLoading) return
@@ -631,7 +687,7 @@ function MessagesContent() {
 
   const handleSendMessage = async (e: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
-    if (!newMessage.trim() || !selectedChat || !currentUserId) return
+    if (!newMessage.trim() || !selectedChat || !currentUserId || !isConnected) return
 
     const tempId = `temp_${Date.now()}`
     const createdAt = new Date().toISOString()
@@ -944,6 +1000,13 @@ function MessagesContent() {
             </div>
           </div>
 
+          {!isConnected && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-2 text-xs text-amber-400">
+              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>Connecting to chat server... Messages won&apos;t send or receive until reconnected.</span>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0a0f1a]" style={{ scrollbarWidth: 'thin' }}>
             {selectedChat.messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500">
@@ -1007,13 +1070,14 @@ function MessagesContent() {
                     void handleSendMessage(e)
                   }
                 }}
-                placeholder="Type a message..."
-                className="flex-1 max-h-32 min-h-[44px] bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all resize-none overflow-y-auto"
+                disabled={!isConnected}
+                placeholder={isConnected ? "Type a message..." : "Chat offline..."}
+                className="flex-1 max-h-32 min-h-[44px] bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all resize-none overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
                 rows={1}
               />
               <button
                 type="submit"
-                disabled={!newMessage.trim()}
+                disabled={!newMessage.trim() || !isConnected}
                 className="w-11 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 cursor-pointer"
                 aria-label="Send message"
               >

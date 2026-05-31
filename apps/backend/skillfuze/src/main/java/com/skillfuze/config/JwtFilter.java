@@ -1,5 +1,7 @@
 package com.skillfuze.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.Collections;
@@ -17,6 +19,8 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -55,15 +59,15 @@ public class JwtFilter extends OncePerRequestFilter {
         try {
             String[] parts = token.split("\\.");
             if (parts.length < 2) return null;
-            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]));
-            int subIndex = payloadJson.indexOf("\"sub\":\"");
-            if (subIndex == -1) {
-                subIndex = payloadJson.indexOf("\"sub\" : \"");
+            byte[] decodedBytes;
+            try {
+                decodedBytes = Base64.getUrlDecoder().decode(parts[1]);
+            } catch (IllegalArgumentException e) {
+                decodedBytes = Base64.getDecoder().decode(parts[1]);
             }
-            if (subIndex != -1) {
-                int start = payloadJson.indexOf("\"", subIndex + 6) + 1;
-                int end = payloadJson.indexOf("\"", start);
-                return payloadJson.substring(start, end);
+            JsonNode payloadNode = objectMapper.readTree(decodedBytes);
+            if (payloadNode.has("sub")) {
+                return payloadNode.get("sub").asText();
             }
         } catch (Exception e) {
             // ignore
